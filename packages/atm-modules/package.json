@@ -1,0 +1,7 @@
+{
+  "name": "@cashblocks/atm-modules",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "../../dist/packages/atm-modules/src/index.js",
+  "types": "../../dist/packages/atm-modules/src/index.d.ts"
+}

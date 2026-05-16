@@ -1,0 +1,7 @@
+{
+  "name": "@cashblocks/runtime-contracts",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "../../dist/packages/runtime-contracts/src/index.js",
+  "types": "../../dist/packages/runtime-contracts/src/index.d.ts"
+}

@@ -1,0 +1,7 @@
+{
+  "name": "@cashblocks/terminal-shell",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "../../dist/apps/terminal-shell/src/dev-server.js",
+  "types": "../../dist/apps/terminal-shell/src/dev-server.d.ts"
+}

@@ -1,0 +1,7 @@
+{
+  "name": "@cashblocks/example-atm-basic",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "../../dist/examples/atm-basic/src/run.js",
+  "types": "../../dist/examples/atm-basic/src/run.d.ts"
+}

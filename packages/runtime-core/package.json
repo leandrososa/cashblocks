@@ -1,0 +1,7 @@
+{
+  "name": "@cashblocks/runtime-core",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "../../dist/packages/runtime-core/src/index.js",
+  "types": "../../dist/packages/runtime-core/src/index.d.ts"
+}

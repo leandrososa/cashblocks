@@ -1,0 +1,24 @@
+{
+  "name": "cashblocks",
+  "version": "0.1.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "packageManager": "bun@1.3.10",
+  "workspaces": [
+    "packages/*",
+    "apps/*",
+    "examples/*"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "bun test packages/runtime-core/src/index.test.ts packages/atm-modules/src/index.test.ts examples/atm-basic/src/flow.test.ts",
+    "dev": "bun run build && node dist/apps/terminal-shell/src/dev-server.js",
+    "example:atm": "bun run build && node dist/examples/atm-basic/src/run.js"
+  },
+  "devDependencies": {
+    "@types/node": "^25.8.0",
+    "typescript": "^5.8.3"
+  }
+}
