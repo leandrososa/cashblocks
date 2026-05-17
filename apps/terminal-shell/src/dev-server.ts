@@ -1,6 +1,11 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 
-import { getFlowManifest, runSimulation, type SimulationRequest } from "./simulation.js";
+import {
+  getFlowManifest,
+  readJournalHistory,
+  runSimulation,
+  type SimulationRequest
+} from "./simulation.js";
 
 const port = Number(process.env.PORT ?? 4173);
 
@@ -29,6 +34,11 @@ async function route(request: IncomingMessage, response: ServerResponse): Promis
 
   if (method === "GET" && url.pathname === "/api/manifest") {
     writeJson(response, 200, getFlowManifest());
+    return;
+  }
+
+  if (method === "GET" && url.pathname === "/api/journal") {
+    writeJson(response, 200, await readJournalHistory(process.env.CASHBLOCKS_JOURNAL_PATH));
     return;
   }
 
@@ -193,6 +203,25 @@ function renderApp(): string {
         overflow: hidden;
       }
 
+      .tabs {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 18px;
+      }
+
+      .tab {
+        width: auto;
+        padding: 10px 14px;
+        background: rgba(16, 24, 32, 0.88);
+        color: var(--ink);
+        border: 1px solid var(--line);
+      }
+
+      .tab.active {
+        background: var(--accent);
+        color: #1b1308;
+      }
+
       .summary {
         display: grid;
         grid-template-columns: repeat(4, 1fr);
@@ -232,6 +261,22 @@ function renderApp(): string {
         background: rgba(8, 15, 20, 0.45);
       }
 
+      .session {
+        display: grid;
+        gap: 8px;
+        padding: 16px;
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        background: rgba(8, 15, 20, 0.45);
+        margin-bottom: 12px;
+      }
+
+      .session button {
+        width: fit-content;
+        margin: 0;
+        padding: 8px 12px;
+      }
+
       .seq {
         color: var(--accent);
         font-weight: 800;
@@ -268,7 +313,12 @@ function renderApp(): string {
         </div>
       </header>
 
-      <div class="grid">
+      <div class="tabs">
+        <button class="tab active" id="runTab">Run Simulation</button>
+        <button class="tab" id="historyTab">Journal History</button>
+      </div>
+
+      <div class="grid" id="runView">
         <section class="controls">
           <label>
             Transaction
@@ -306,13 +356,28 @@ function renderApp(): string {
           <div class="timeline" id="timeline"></div>
         </section>
       </div>
+
+      <section class="output" id="historyView" hidden>
+        <div class="summary" id="historySummary"></div>
+        <div class="timeline" id="history"></div>
+      </section>
     </main>
 
     <script>
       const $ = (id) => document.getElementById(id);
 
       $("run").addEventListener("click", run);
+      $("runTab").addEventListener("click", () => showTab("run"));
+      $("historyTab").addEventListener("click", () => showTab("history"));
       run();
+
+      function showTab(tab) {
+        $("runView").hidden = tab !== "run";
+        $("historyView").hidden = tab !== "history";
+        $("runTab").classList.toggle("active", tab === "run");
+        $("historyTab").classList.toggle("active", tab === "history");
+        if (tab === "history") loadHistory();
+      }
 
       async function run() {
         $("run").disabled = true;
@@ -338,6 +403,11 @@ function renderApp(): string {
         }
       }
 
+      async function loadHistory() {
+        const response = await fetch("/api/journal");
+        renderHistory(await response.json());
+      }
+
       function render(result) {
         const summary = result.summary;
         $("summary").innerHTML = [
@@ -355,6 +425,40 @@ function renderApp(): string {
             "<div class='payload'>" + escapeHtml(payload) + "</div></div>" +
             "</article>";
         }).join("");
+      }
+
+      function renderHistory(history) {
+        $("historySummary").innerHTML = [
+          metric("Journal", history.configured ? "configured" : "not configured"),
+          metric("Sessions", String(history.sessions.length)),
+          metric("Path", history.journalPath || "set CASHBLOCKS_JOURNAL_PATH"),
+          metric("Newest", history.sessions[0]?.events.at(-1)?.ts || "none")
+        ].join("");
+
+        $("history").innerHTML = history.sessions.map((session) => {
+          return "<article class='session'>" +
+            "<strong>" + escapeHtml(session.sessionId) + "</strong>" +
+            "<span>Status: " + escapeHtml(session.summary.status) + " · Events: " + session.summary.eventCount + "</span>" +
+            "<span>Transaction: " + escapeHtml(session.summary.selectedTransaction || "none") + "</span>" +
+            "<button data-session='" + escapeHtml(session.sessionId) + "'>Show events</button>" +
+            "<div class='timeline' hidden>" + session.events.map((event) => {
+              const payload = event.payload ? JSON.stringify(event.payload, null, 2) : "";
+              return "<article class='event'>" +
+                "<div class='seq'>#" + event.seq + "</div>" +
+                "<div><div class='type'>" + escapeHtml(event.type) + "</div>" +
+                "<div class='payload'>" + escapeHtml(payload) + "</div></div>" +
+                "</article>";
+            }).join("") + "</div>" +
+            "</article>";
+        }).join("");
+
+        document.querySelectorAll("[data-session]").forEach((button) => {
+          button.addEventListener("click", () => {
+            const timeline = button.nextElementSibling;
+            timeline.hidden = !timeline.hidden;
+            button.textContent = timeline.hidden ? "Show events" : "Hide events";
+          });
+        });
       }
 
       function metric(label, value) {

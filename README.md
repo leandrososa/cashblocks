@@ -28,6 +28,9 @@ bun run dev
 `bun run dev` starts a local browser shell with simulator controls and a journal
 timeline at `http://localhost:4173`.
 
+Set `CASHBLOCKS_JOURNAL_PATH=./data/runtime.journal.jsonl` before `bun run dev`
+to persist runs and view them in the shell's Journal History tab.
+
 ## Flow Packages
 
 Flow packages include a `cashblocks.flow.json` manifest and a TypeScript

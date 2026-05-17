@@ -1,6 +1,6 @@
 import { runFlow } from "../../../packages/flow-sdk/src/index.js";
 import type { FlowPackage, RuntimeEvent } from "../../../packages/runtime-contracts/src/index.js";
-import type { RuntimeSimulatorOptions } from "../../../packages/runtime-core/src/index.js";
+import { JsonlJournalPersistence, type RuntimeSimulatorOptions } from "../../../packages/runtime-core/src/index.js";
 import flow from "../../../examples/atm-basic/src/flow.js";
 import manifest from "../../../examples/atm-basic/cashblocks.flow.json" with { type: "json" };
 
@@ -31,6 +31,18 @@ export type SimulationResult = {
   manifest: FlowPackage;
   summary: SimulationSummary;
   events: RuntimeEvent[];
+};
+
+export type JournalSession = {
+  sessionId: string;
+  summary: SimulationSummary;
+  events: RuntimeEvent[];
+};
+
+export type JournalHistory = {
+  configured: boolean;
+  journalPath?: string;
+  sessions: JournalSession[];
 };
 
 const flowPackage = manifest as FlowPackage;
@@ -102,5 +114,43 @@ export function summarizeEvents(events: RuntimeEvent[], flowOk = true): Simulati
           : undefined,
     warningOffered: Boolean(warning),
     eventCount: events.length
+  };
+}
+
+export async function readJournalHistory(journalPath?: string): Promise<JournalHistory> {
+  if (!journalPath) {
+    return {
+      configured: false,
+      sessions: []
+    };
+  }
+
+  const events = await new JsonlJournalPersistence(journalPath).readAll();
+  const grouped = new Map<string, RuntimeEvent[]>();
+
+  for (const event of events) {
+    if (!event.sessionId) {
+      continue;
+    }
+    const sessionId = event.sessionId;
+    grouped.set(sessionId, [...(grouped.get(sessionId) ?? []), event]);
+  }
+
+  const sessions = [...grouped.entries()]
+    .map(([sessionId, sessionEvents]) => ({
+      sessionId,
+      summary: summarizeEvents(sessionEvents, !sessionEvents.some((event) => event.type === "flow.failed")),
+      events: sessionEvents
+    }))
+    .sort((left, right) => {
+      const leftTs = left.events.at(-1)?.ts ?? "";
+      const rightTs = right.events.at(-1)?.ts ?? "";
+      return rightTs.localeCompare(leftTs);
+    });
+
+  return {
+    configured: true,
+    journalPath,
+    sessions
   };
 }

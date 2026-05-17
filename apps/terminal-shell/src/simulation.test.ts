@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { mkdtemp } from "node:fs/promises";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 
-import { getFlowManifest, runSimulation } from "./simulation.js";
+import { getFlowManifest, readJournalHistory, runSimulation } from "./simulation.js";
 
 test("returns the active flow manifest", () => {
   assert.equal(getFlowManifest().id, "cashblocks.example.atm-basic");
@@ -71,4 +74,28 @@ test("surfaces receipt warning cancellation without selecting a transaction", as
   assert.equal(result.summary.failed, false);
   assert.equal(result.summary.status, "cancelled");
   assert.equal(result.summary.warningOffered, true);
+});
+
+test("reads durable journal history grouped by session", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "cashblocks-history-"));
+  const journalPath = join(dir, "runtime.jsonl");
+
+  await runSimulation({ transaction: "CashWithdrawal", journalPath });
+  await runSimulation({ transaction: "CashWithdrawal", hostDeclined: true, journalPath });
+
+  const history = await readJournalHistory(journalPath);
+
+  assert.equal(history.configured, true);
+  assert.equal(history.sessions.length, 2);
+  assert.deepEqual(
+    history.sessions.map((session) => session.summary.status).sort(),
+    ["completed", "failed"]
+  );
+});
+
+test("reports unconfigured journal history", async () => {
+  const history = await readJournalHistory();
+
+  assert.equal(history.configured, false);
+  assert.deepEqual(history.sessions, []);
 });
