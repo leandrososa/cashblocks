@@ -10,6 +10,7 @@ runtime logic.
 - TypeScript monorepo with runtime contracts, runtime core, ATM modules, flow SDK,
   a simulated ATM flow, and a minimal browser shell.
 - The example flow is in `examples/atm-basic/src/flow.ts`.
+- Adapter contracts and JSONL journal persistence are documented in `ADAPTERS.md`.
 - Hardware, XFS/CEN XFS, ISO8583, NDC, and proprietary drivers are intentionally
   adapter concerns outside the first simulator MVP.
 

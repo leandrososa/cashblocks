@@ -15,7 +15,7 @@ function g(): FlowGlobals {
 
 export function OnStartOfDay(): void {
   const {
-    K3A,
+    Cashblocks,
     BalanceInquiry,
     PCCUCashWithdrawal,
     FastCash,
@@ -23,7 +23,7 @@ export function OnStartOfDay(): void {
     Customer
   } = g();
 
-  K3A.SetCurrencyDetails("AUD", "$", true);
+  Cashblocks.SetCurrencyDetails("AUD", "$", true);
   BalanceInquiry.AddHandler("OnEndReceiptOption", OnEndReceiptOption);
   PCCUCashWithdrawal.AddHandler("OnEndReceiptOption", OnEndCWReceiptOption);
   FastCash.AddHandler("OnEndReceiptOption", OnEndCWReceiptOption);
@@ -33,18 +33,18 @@ export function OnStartOfDay(): void {
 }
 
 export function OnEndReceiptOption(): void {
-  const { K3A, BalanceInquiry } = g();
+  const { Cashblocks, BalanceInquiry } = g();
 
   if (
-    K3A.GetProperty("Devices.ReceiptPrinter.StDeviceStatus") !== "HEALTHY" ||
-    K3A.GetProperty("Devices.ReceiptPrinter.StPaperStatus") === "OUT"
+    Cashblocks.GetProperty("Devices.ReceiptPrinter.StDeviceStatus") !== "HEALTHY" ||
+    Cashblocks.GetProperty("Devices.ReceiptPrinter.StPaperStatus") === "OUT"
   ) {
     BalanceInquiry.DisplayBalanceOnScreen = true;
   } else if (
-    K3A.ScratchPad.Contains("DisplayBalance") &&
-    K3A.ScratchPad.Get("DisplayBalance") === true
+    Cashblocks.ScratchPad.Contains("DisplayBalance") &&
+    Cashblocks.ScratchPad.Get("DisplayBalance") === true
   ) {
-    K3A.ScratchPad.Remove("DisplayBalance");
+    Cashblocks.ScratchPad.Remove("DisplayBalance");
     BalanceInquiry.DisplayBalanceOnScreen = true;
   } else {
     BalanceInquiry.DisplayBalanceOnScreen = false;
@@ -52,27 +52,27 @@ export function OnEndReceiptOption(): void {
 }
 
 export function OnEndCWReceiptOption(): void {
-  const { K3A } = g();
+  const { Cashblocks } = g();
 
   if (
-    K3A.GetProperty("Devices.ReceiptPrinter.StDeviceStatus") !== "HEALTHY" ||
-    K3A.GetProperty("Devices.ReceiptPrinter.StPaperStatus") === "OUT"
+    Cashblocks.GetProperty("Devices.ReceiptPrinter.StDeviceStatus") !== "HEALTHY" ||
+    Cashblocks.GetProperty("Devices.ReceiptPrinter.StPaperStatus") === "OUT"
   ) {
-    K3A.ScratchPad.Set("DisplayBalance", true);
+    Cashblocks.ScratchPad.Set("DisplayBalance", true);
   }
 }
 
 export function OnStartReinsertCard(): void {
-  g().K3A.SetProperty("CustomerApp.Customer.MoreTimeEnabled", false);
+  g().Cashblocks.SetProperty("CustomerApp.Customer.MoreTimeEnabled", false);
 }
 
 export function ReEnableMoreTime(): void {
-  g().K3A.SetProperty("CustomerApp.Customer.MoreTimeEnabled", true);
+  g().Cashblocks.SetProperty("CustomerApp.Customer.MoreTimeEnabled", true);
 }
 
 export async function OnIdle(): Promise<void> {
   const {
-    K3A,
+    Cashblocks,
     Idle,
     Customer,
     PCCUSession,
@@ -106,17 +106,17 @@ export async function OnIdle(): Promise<void> {
     Customer.PinEntry();
   }
 
-  K3A.LogJournalLine(`LanguageUsed: ${K3A.LocalLanguage.CurrentLanguage}`);
-  K3A.ScratchPad.Set("ReceiptWarningOffered", false);
+  Cashblocks.LogJournalLine(`LanguageUsed: ${Cashblocks.LocalLanguage.CurrentLanguage}`);
+  Cashblocks.ScratchPad.Set("ReceiptWarningOffered", false);
 
   let moreTransaction = true;
   while (moreTransaction) {
     moreTransaction = false;
     ResetDCCValues();
 
-    const receiptWarningOffered = K3A.ScratchPad.Get("ReceiptWarningOffered");
+    const receiptWarningOffered = Cashblocks.ScratchPad.Get("ReceiptWarningOffered");
     if (!receiptWarningOffered && isReceiptPrinterUnavailable()) {
-      K3A.ScratchPad.Set("ReceiptWarningOffered", true);
+      Cashblocks.ScratchPad.Set("ReceiptWarningOffered", true);
       if (!OfferReceiptWarning()) {
         return;
       }
@@ -126,7 +126,7 @@ export async function OnIdle(): Promise<void> {
     SetCashAdjustmentOptions();
 
     const transaction = cardless ? Idle.TouchActivationParameter : Customer.SelectTransaction();
-    K3A.Log(`TRANSACTION SELECTED:${transaction}`);
+    Cashblocks.Log(`TRANSACTION SELECTED:${transaction}`);
 
     if (transaction === "CardlessWithdrawal") {
       Customer.TransactionSelected = "PCCUCardlessCashWithdrawal";
@@ -149,8 +149,8 @@ export async function OnIdle(): Promise<void> {
       PCCUCashDeposit.Authorization.TransactionHost = "PCCUNDCHost";
       await PCCUCashDeposit.Execute();
     } else if (transaction === "FastCash") {
-      if (K3A.ScratchPad.Contains("FastCashAmount")) {
-        FastCash.AmountSelector.AmountPreset = Number(K3A.ScratchPad.Get("FastCashAmount"));
+      if (Cashblocks.ScratchPad.Contains("FastCashAmount")) {
+        FastCash.AmountSelector.AmountPreset = Number(Cashblocks.ScratchPad.Get("FastCashAmount"));
       }
       await FastCash.Execute();
     } else if (transaction === "AdminBalanceTerminal") {
@@ -186,7 +186,7 @@ function OfferReceiptWarning(): boolean {
 }
 
 function SetCashAdjustmentOptions(): void {
-  const { K3A, PCCUSession } = g();
+  const { Cashblocks, PCCUSession } = g();
   let isNote100Supported = false;
   const supportedNotes = PCCUSession.SupportedNotes;
 
@@ -203,23 +203,23 @@ function SetCashAdjustmentOptions(): void {
     ? ["Add10", "Add20", "Add50", "Add100", "Remove10", "Remove20", "Remove50", "Remove100"]
     : ["Add10", "Add20", "Add50", "Remove10", "Remove20", "Remove50"];
 
-  K3A.SetProperty("CustomerApp.ProsegurNDCAdmin.CashAdjustmentOptions", options);
+  Cashblocks.SetProperty("CustomerApp.ProsegurNDCAdmin.CashAdjustmentOptions", options);
 }
 
 function ResetDCCValues(): void {
-  const { K3A } = g();
-  K3A.ScratchPad.Set("DCCIniAmount", "");
-  K3A.ScratchPad.Set("DCCRate", "");
-  K3A.ScratchPad.Set("DCCFinAmount", "");
-  K3A.ScratchPad.Set("DCCSurcharge", "");
-  K3A.ScratchPad.Set("DCCChoice", "");
-  K3A.ScratchPad.Set("DCCConvertedAmount", "");
+  const { Cashblocks } = g();
+  Cashblocks.ScratchPad.Set("DCCIniAmount", "");
+  Cashblocks.ScratchPad.Set("DCCRate", "");
+  Cashblocks.ScratchPad.Set("DCCFinAmount", "");
+  Cashblocks.ScratchPad.Set("DCCSurcharge", "");
+  Cashblocks.ScratchPad.Set("DCCChoice", "");
+  Cashblocks.ScratchPad.Set("DCCConvertedAmount", "");
 }
 
 function isReceiptPrinterUnavailable(): boolean {
-  const { K3A } = g();
+  const { Cashblocks } = g();
   return (
-    K3A.GetProperty("Devices.ReceiptPrinter.StDeviceStatus") !== "HEALTHY" ||
-    K3A.GetProperty("Devices.ReceiptPrinter.StPaperStatus") === "OUT"
+    Cashblocks.GetProperty("Devices.ReceiptPrinter.StDeviceStatus") !== "HEALTHY" ||
+    Cashblocks.GetProperty("Devices.ReceiptPrinter.StPaperStatus") === "OUT"
   );
 }

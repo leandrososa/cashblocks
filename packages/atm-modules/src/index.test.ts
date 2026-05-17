@@ -31,3 +31,20 @@ test("cash withdrawal journals authorization configuration", async () => {
   assert.equal(authorizationEvent?.payload?.host, "PCCUNDCHost");
   assert.equal(authorizationEvent?.payload?.chipRequired, true);
 });
+
+test("cash withdrawal fails when host adapter declines", async () => {
+  const runtime = new CashblocksRuntime({
+    simulator: undefined
+  });
+  const modules = createAtmModules(runtime);
+
+  runtime.Simulator.hostApproved = false;
+  const result = await modules.PCCUCashWithdrawal.Execute();
+
+  assert.equal(result.ok, false);
+  assert.equal(result.code, "HOST_DECLINED");
+  assert.equal(
+    runtime.Journal.all().some((event) => event.type === "transaction.failed"),
+    true
+  );
+});

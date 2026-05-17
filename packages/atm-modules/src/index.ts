@@ -102,11 +102,11 @@ export class SessionModule {
   constructor(private readonly runtime: CashblocksRuntime) {}
 
   SetupDefaultAccount(): void {
-    this.runtime.K3A.Log("Default account mapped.");
+    this.runtime.Cashblocks.Log("Default account mapped.");
   }
 
   NewTransaction(): void {
-    this.runtime.K3A.Log("New transaction started.");
+    this.runtime.Cashblocks.Log("New transaction started.");
   }
 
   AnotherTransaction(): boolean {
@@ -154,6 +154,7 @@ export class BalanceInquiryModule extends AtmModule {
 
 export class CashWithdrawalModule extends AtmModule {
   readonly Authorization = new AuthorizationModule();
+  Amount = 100;
 
   constructor(runtime: CashblocksRuntime, name = "PCCUCashWithdrawal") {
     super(runtime, name);
@@ -172,6 +173,53 @@ export class CashWithdrawalModule extends AtmModule {
         pinEntryOption: this.Authorization.PinEntryOption
       }
     });
+
+    const currencyCode = this.runtime.Cashblocks.GetProperty<string>("Currency.Code") ?? "AUD";
+    const authorization = await this.runtime.Adapters.hostAuthorization.authorize({
+      transaction: this.Name,
+      host: this.Authorization.TransactionHost,
+      amount: this.Amount,
+      currencyCode,
+      pinless: this.Authorization.PinlessAuthorizationEnabled,
+      chipRequired: this.Authorization.ChipAuthorizationRequired
+    });
+
+    this.runtime.Journal.append({
+      type: "host.authorization_result",
+      source: "module",
+      sessionId: this.runtime.SessionId,
+      payload: {
+        transaction: this.Name,
+        ok: authorization.ok,
+        code: authorization.code,
+        message: authorization.message
+      }
+    });
+
+    if (!authorization.ok) {
+      this.runtime.Journal.append({
+        type: "transaction.failed",
+        source: "module",
+        sessionId: this.runtime.SessionId,
+        payload: { transaction: this.Name, code: authorization.code }
+      });
+      return this.runtime.result(false, authorization.code, authorization.message);
+    }
+
+    const dispense = await this.runtime.Adapters.cashDispenser.dispense({
+      amount: this.Amount,
+      currencyCode
+    });
+
+    if (!dispense.ok) {
+      this.runtime.Journal.append({
+        type: "transaction.failed",
+        source: "module",
+        sessionId: this.runtime.SessionId,
+        payload: { transaction: this.Name, code: dispense.code }
+      });
+      return this.runtime.result(false, dispense.code, dispense.message);
+    }
 
     await this.handlers.emit("OnEndReceiptOption");
 
@@ -197,12 +245,29 @@ export class FastCashModule extends CashWithdrawalModule {
 
 export class CashDepositModule extends AtmModule {
   readonly Authorization = new AuthorizationModule();
+  ExpectedAmount = 0;
 
   constructor(runtime: CashblocksRuntime) {
     super(runtime, "PCCUCashDeposit");
   }
 
   async Execute(): Promise<TransactionResult> {
+    const currencyCode = this.runtime.Cashblocks.GetProperty<string>("Currency.Code") ?? "AUD";
+    const accepted = await this.runtime.Adapters.cashAcceptor.accept({
+      expectedAmount: this.ExpectedAmount || undefined,
+      currencyCode
+    });
+
+    if (!accepted.ok) {
+      this.runtime.Journal.append({
+        type: "transaction.failed",
+        source: "module",
+        sessionId: this.runtime.SessionId,
+        payload: { transaction: this.Name, code: accepted.code }
+      });
+      return this.runtime.result(false, accepted.code, accepted.message);
+    }
+
     this.runtime.Journal.append({
       type: "transaction.completed",
       source: "module",

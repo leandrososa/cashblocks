@@ -51,6 +51,61 @@ export type TransactionResult = {
   details?: Record<string, JsonValue>;
 };
 
+export type AdapterResult = {
+  ok: boolean;
+  code: string;
+  message: string;
+  details?: Record<string, JsonValue>;
+};
+
+export type ReceiptPrinterStatus = {
+  health: DeviceHealth;
+  paper: PaperStatus;
+};
+
+export type ReceiptPrinterAdapter = {
+  readonly id: string;
+  getStatus(): Promise<ReceiptPrinterStatus>;
+  printReceipt(lines: string[]): Promise<AdapterResult>;
+};
+
+export type CashDispenserAdapter = {
+  readonly id: string;
+  dispense(input: { amount: number; currencyCode: string }): Promise<AdapterResult>;
+};
+
+export type CashAcceptorAdapter = {
+  readonly id: string;
+  accept(input: { expectedAmount?: number; currencyCode: string }): Promise<AdapterResult>;
+};
+
+export type CardReaderAdapter = {
+  readonly id: string;
+  readCard(): Promise<AdapterResult>;
+};
+
+export type HostAuthorizationRequest = {
+  transaction: string;
+  host: string;
+  amount?: number;
+  currencyCode: string;
+  pinless: boolean;
+  chipRequired: boolean;
+};
+
+export type HostAuthorizationAdapter = {
+  readonly id: string;
+  authorize(request: HostAuthorizationRequest): Promise<AdapterResult>;
+};
+
+export type TerminalAdapters = {
+  receiptPrinter: ReceiptPrinterAdapter;
+  cashDispenser: CashDispenserAdapter;
+  cashAcceptor: CashAcceptorAdapter;
+  cardReader: CardReaderAdapter;
+  hostAuthorization: HostAuthorizationAdapter;
+};
+
 export type ModuleHandler = () => void | boolean | Promise<void | boolean>;
 
 export type TransactionModule = {

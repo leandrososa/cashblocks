@@ -19,7 +19,7 @@ test("printer out balance inquiry forces screen display", async () => {
   const result = await runFlow(flow, {
     simulator: { customerSelections: ["BalanceInquiry"], optionSelections: ["YES"] },
     configure(globals) {
-      globals.K3A.SetProperty("Devices.ReceiptPrinter.StPaperStatus", "OUT");
+      globals.Cashblocks.SetProperty("Devices.ReceiptPrinter.StPaperStatus", "OUT");
       flow.bindFlow(globals);
     }
   });

@@ -3,7 +3,7 @@ import { CashblocksRuntime, RuntimeSimulator, type RuntimeSimulatorOptions } fro
 import { createAtmModules, type AtmModules } from "../../atm-modules/src/index.js";
 
 export type FlowGlobals = AtmModules & {
-  K3A: RuntimeApi;
+  Cashblocks: RuntimeApi;
 };
 
 export type FlowModule = Partial<{
@@ -13,6 +13,7 @@ export type FlowModule = Partial<{
 
 export type FlowRunOptions = {
   simulator?: RuntimeSimulatorOptions;
+  journalPath?: string;
   configure?(globals: FlowGlobals): void;
 };
 
@@ -23,11 +24,12 @@ export type FlowRunResult = {
 
 export async function runFlow(flow: FlowModule, options: FlowRunOptions = {}): Promise<FlowRunResult> {
   const runtime = new CashblocksRuntime({
-    simulator: new RuntimeSimulator(options.simulator)
+    simulator: new RuntimeSimulator(options.simulator),
+    journalPath: options.journalPath
   });
   const modules = createAtmModules(runtime);
   const globals: FlowGlobals = {
-    K3A: runtime.K3A,
+    Cashblocks: runtime.Cashblocks,
     ...modules
   };
 
