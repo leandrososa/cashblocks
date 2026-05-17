@@ -28,10 +28,7 @@ a flow through the SDK:
 
 ```ts
 await runFlow(flow, {
-  journalPath: "./data/runtime.journal.jsonl",
-  configure(globals) {
-    flow.bindFlow(globals);
-  }
+  journalPath: "./data/runtime.journal.jsonl"
 });
 ```
 
@@ -45,5 +42,5 @@ needs to guarantee all pending appends are on disk.
 
 The simulator is intentionally deterministic and small. It is enough for flow
 tests, UI development, and adapter-contract iteration. It is not a substitute
-for certification-grade implementations of CEN/XFS, J/XFS, ISO8583, NDC, or
-vendor-specific device services.
+for certification-grade implementations of CEN/XFS, J/XFS, ISO8583, legacy host
+protocols, or vendor-specific device services.

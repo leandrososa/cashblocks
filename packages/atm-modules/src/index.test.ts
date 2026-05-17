@@ -21,14 +21,14 @@ test("cash withdrawal journals authorization configuration", async () => {
   const runtime = new CashblocksRuntime();
   const modules = createAtmModules(runtime);
 
-  modules.PCCUCashWithdrawal.Authorization.TransactionHost = "PCCUNDCHost";
-  modules.PCCUCashWithdrawal.Authorization.ChipAuthorizationRequired = true;
-  await modules.PCCUCashWithdrawal.Execute();
+  modules.CashWithdrawal.Authorization.TransactionHost = "CoreHost";
+  modules.CashWithdrawal.Authorization.ChipAuthorizationRequired = true;
+  await modules.CashWithdrawal.Execute();
 
   const authorizationEvent = runtime.Journal.all().find(
     (event) => event.type === "host.authorization_requested"
   );
-  assert.equal(authorizationEvent?.payload?.host, "PCCUNDCHost");
+  assert.equal(authorizationEvent?.payload?.host, "CoreHost");
   assert.equal(authorizationEvent?.payload?.chipRequired, true);
 });
 
@@ -39,7 +39,7 @@ test("cash withdrawal fails when host adapter declines", async () => {
   const modules = createAtmModules(runtime);
 
   runtime.Simulator.hostApproved = false;
-  const result = await modules.PCCUCashWithdrawal.Execute();
+  const result = await modules.CashWithdrawal.Execute();
 
   assert.equal(result.ok, false);
   assert.equal(result.code, "HOST_DECLINED");

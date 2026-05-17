@@ -1,0 +1,24 @@
+{
+  "id": "cashblocks.example.atm-basic",
+  "version": "0.1.0",
+  "description": "Simulator-backed ATM flow demonstrating balance inquiry, cash withdrawal, fast cash, deposits, cardless withdrawal, and admin operations.",
+  "entrypoint": "src/flow.ts",
+  "capabilities": [
+    "receipt-printer",
+    "cash-dispenser",
+    "cash-acceptor",
+    "card-reader",
+    "host-authorization"
+  ],
+  "modules": [
+    "Idle",
+    "Customer",
+    "CoreSession",
+    "BalanceInquiry",
+    "CashWithdrawal",
+    "CardlessCashWithdrawal",
+    "CashDeposit",
+    "FastCash",
+    "TerminalAdmin"
+  ]
+}

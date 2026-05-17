@@ -8,7 +8,7 @@ export type JsonValue =
 
 export type DeviceHealth = "HEALTHY" | "DEGRADED" | "FATAL" | "MISSING";
 export type PaperStatus = "OK" | "LOW" | "OUT";
-export type CustomerType = "OnUs" | "Local" | "TOUCH" | "ProsegurAdmin" | "Unknown";
+export type CustomerType = "OnUs" | "Local" | "TOUCH" | "OperatorAdmin" | "Unknown";
 
 export type RuntimeEventType =
   | "runtime.started"
@@ -151,6 +151,7 @@ export type FlowPackage = {
   description?: string;
   entrypoint: string;
   capabilities: string[];
+  modules?: string[];
 };
 
 export function validateFlowPackage(flowPackage: FlowPackage): ValidationIssue[] {
@@ -166,6 +167,10 @@ export function validateFlowPackage(flowPackage: FlowPackage): ValidationIssue[]
 
   if (!flowPackage.entrypoint.trim()) {
     issues.push({ field: "entrypoint", message: "Flow package entrypoint is required." });
+  }
+
+  if (!Array.isArray(flowPackage.capabilities)) {
+    issues.push({ field: "capabilities", message: "Capabilities must be an array." });
   }
 
   return issues;

@@ -156,7 +156,7 @@ export class CashWithdrawalModule extends AtmModule {
   readonly Authorization = new AuthorizationModule();
   Amount = 100;
 
-  constructor(runtime: CashblocksRuntime, name = "PCCUCashWithdrawal") {
+  constructor(runtime: CashblocksRuntime, name = "CashWithdrawal") {
     super(runtime, name);
   }
 
@@ -248,7 +248,7 @@ export class CashDepositModule extends AtmModule {
   ExpectedAmount = 0;
 
   constructor(runtime: CashblocksRuntime) {
-    super(runtime, "PCCUCashDeposit");
+    super(runtime, "CashDeposit");
   }
 
   async Execute(): Promise<TransactionResult> {
@@ -282,7 +282,7 @@ export class AdminModule extends AtmModule {
   private operation = "none";
 
   constructor(runtime: CashblocksRuntime) {
-    super(runtime, "ProsegurNDCAdmin");
+    super(runtime, "TerminalAdmin");
   }
 
   PrepareBalance(): void {
@@ -311,25 +311,25 @@ export class AdminModule extends AtmModule {
 export type AtmModules = {
   Idle: IdleModule;
   Customer: CustomerModule;
-  PCCUSession: SessionModule;
+  CoreSession: SessionModule;
   BalanceInquiry: BalanceInquiryModule;
-  PCCUCashWithdrawal: CashWithdrawalModule;
-  PCCUCardlessCashWithdrawal: CashWithdrawalModule;
-  PCCUCashDeposit: CashDepositModule;
+  CashWithdrawal: CashWithdrawalModule;
+  CardlessCashWithdrawal: CashWithdrawalModule;
+  CashDeposit: CashDepositModule;
   FastCash: FastCashModule;
-  ProsegurNDCAdmin: AdminModule;
+  TerminalAdmin: AdminModule;
 };
 
 export function createAtmModules(runtime: CashblocksRuntime): AtmModules {
   return {
     Idle: new IdleModule(runtime),
     Customer: new CustomerModule(runtime),
-    PCCUSession: new SessionModule(runtime),
+    CoreSession: new SessionModule(runtime),
     BalanceInquiry: new BalanceInquiryModule(runtime),
-    PCCUCashWithdrawal: new CashWithdrawalModule(runtime),
-    PCCUCardlessCashWithdrawal: new CashWithdrawalModule(runtime, "PCCUCardlessCashWithdrawal"),
-    PCCUCashDeposit: new CashDepositModule(runtime),
+    CashWithdrawal: new CashWithdrawalModule(runtime),
+    CardlessCashWithdrawal: new CashWithdrawalModule(runtime, "CardlessCashWithdrawal"),
+    CashDeposit: new CashDepositModule(runtime),
     FastCash: new FastCashModule(runtime),
-    ProsegurNDCAdmin: new AdminModule(runtime)
+    TerminalAdmin: new AdminModule(runtime)
   };
 }

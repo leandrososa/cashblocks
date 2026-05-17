@@ -1,14 +1,11 @@
 import { createServer } from "node:http";
 
 import { runFlow } from "../../../packages/flow-sdk/src/index.js";
-import * as flow from "../../../examples/atm-basic/src/flow.js";
+import flow from "../../../examples/atm-basic/src/flow.js";
 
 const server = createServer(async (_request, response) => {
   const result = await runFlow(flow, {
-    simulator: { customerSelections: ["BalanceInquiry"] },
-    configure(globals) {
-      flow.bindFlow(globals);
-    }
+    simulator: { customerSelections: ["BalanceInquiry"] }
   });
 
   const journal = JSON.stringify(result.runtime.Journal.all(), null, 2);

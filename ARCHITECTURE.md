@@ -20,9 +20,11 @@ Cashblocks separates stable terminal behavior from project-specific flow code.
 
 ## Flow Boundary
 
-Flow files are TypeScript modules that export lifecycle functions like
-`OnStartOfDay` and `OnIdle`. They receive runtime objects through `bindFlow`,
-then use `Cashblocks`, transaction modules, and module handlers.
+Flow packages have a `cashblocks.flow.json` manifest with id, version,
+entrypoint, required capabilities, and module names. Flow files are TypeScript
+modules that export `defineFlow((globals) => lifecycle)`. The runtime creates
+fresh globals for each run, then the flow uses `Cashblocks`, transaction modules,
+and module handlers from that scoped context.
 
 The core rule is that flow code decides ordering and customer-specific policy,
 while modules and runtime own transaction mechanics, state recording, device
@@ -31,8 +33,9 @@ status, and journaled truth.
 ## Adapter Boundary
 
 The MVP ships simulator adapters only. Real integrations such as CEN/XFS,
-J/XFS, ISO8583, NDC, receipt printers, card readers, and cash dispensers should
-be added behind module/runtime adapter contracts without changing flow scripts.
+J/XFS, ISO8583, legacy host protocols, receipt printers, card readers, and cash
+dispensers should be added behind module/runtime adapter contracts without
+changing flow scripts.
 
 Runtime events can be persisted as JSON Lines by passing `journalPath` to the
 runtime or flow SDK. In-memory journal state remains available for the active
