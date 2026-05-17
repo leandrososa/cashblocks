@@ -25,7 +25,8 @@ bun run example:atm
 bun run dev
 ```
 
-`bun run dev` starts a local browser shell that shows the simulator journal.
+`bun run dev` starts a local browser shell with simulator controls and a journal
+timeline at `http://localhost:4173`.
 
 ## Flow Packages
 

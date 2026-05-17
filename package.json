@@ -13,7 +13,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "bun test packages/runtime-core/src/index.test.ts packages/atm-modules/src/index.test.ts packages/flow-sdk/src/index.test.ts examples/atm-basic/src/flow.test.ts",
+    "test": "bun test packages/runtime-core/src/index.test.ts packages/atm-modules/src/index.test.ts packages/flow-sdk/src/index.test.ts apps/terminal-shell/src/simulation.test.ts examples/atm-basic/src/flow.test.ts",
     "dev": "bun run build && node dist/apps/terminal-shell/src/dev-server.js",
     "example:atm": "bun run build && node dist/examples/atm-basic/src/run.js"
   },

@@ -1,46 +1,374 @@
-import { createServer } from "node:http";
+import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 
-import { runFlow } from "../../../packages/flow-sdk/src/index.js";
-import flow from "../../../examples/atm-basic/src/flow.js";
+import { getFlowManifest, runSimulation, type SimulationRequest } from "./simulation.js";
 
-const server = createServer(async (_request, response) => {
-  const result = await runFlow(flow, {
-    simulator: { customerSelections: ["BalanceInquiry"] }
-  });
+const port = Number(process.env.PORT ?? 4173);
 
-  const journal = JSON.stringify(result.runtime.Journal.all(), null, 2);
+const server = createServer(async (request, response) => {
+  try {
+    await route(request, response);
+  } catch (error) {
+    writeJson(response, 500, {
+      error: error instanceof Error ? error.message : "Unexpected server error"
+    });
+  }
+});
+
+server.listen(port, () => {
+  console.log(`Cashblocks terminal shell listening on http://localhost:${port}`);
+});
+
+async function route(request: IncomingMessage, response: ServerResponse): Promise<void> {
+  const method = request.method ?? "GET";
+  const url = new URL(request.url ?? "/", `http://${request.headers.host ?? "localhost"}`);
+
+  if (method === "GET" && url.pathname === "/") {
+    writeHtml(response, renderApp());
+    return;
+  }
+
+  if (method === "GET" && url.pathname === "/api/manifest") {
+    writeJson(response, 200, getFlowManifest());
+    return;
+  }
+
+  if (method === "POST" && url.pathname === "/api/run") {
+    const body = await readJson<SimulationRequest>(request);
+    const result = await runSimulation({
+      ...body,
+      journalPath: process.env.CASHBLOCKS_JOURNAL_PATH
+    });
+    writeJson(response, 200, result);
+    return;
+  }
+
+  writeJson(response, 404, { error: "Not found" });
+}
+
+function writeHtml(response: ServerResponse, html: string): void {
   response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-  response.end(`<!doctype html>
+  response.end(html);
+}
+
+function writeJson(response: ServerResponse, status: number, payload: unknown): void {
+  response.writeHead(status, { "content-type": "application/json; charset=utf-8" });
+  response.end(JSON.stringify(payload, null, 2));
+}
+
+async function readJson<T>(request: IncomingMessage): Promise<T> {
+  const chunks: Buffer[] = [];
+
+  for await (const chunk of request) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+
+  if (chunks.length === 0) {
+    return {} as T;
+  }
+
+  return JSON.parse(Buffer.concat(chunks).toString("utf8")) as T;
+}
+
+function renderApp(): string {
+  return `<!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Cashblocks Terminal Shell</title>
     <style>
-      body { margin: 0; background: #101820; color: #f7efe5; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
-      main { max-width: 960px; margin: 0 auto; padding: 48px 24px; }
-      h1 { font-size: 40px; margin: 0 0 8px; }
-      p { color: #d8c9b7; }
-      pre { overflow: auto; padding: 24px; border: 1px solid #405466; background: #17232d; border-radius: 16px; }
+      :root {
+        color-scheme: dark;
+        --ink: #fff8ec;
+        --muted: #b9ad9b;
+        --line: rgba(255, 248, 236, 0.16);
+        --panel: rgba(18, 30, 38, 0.86);
+        --panel-strong: #101820;
+        --accent: #f5b84b;
+        --good: #62d48f;
+        --bad: #ff776d;
+      }
+
+      * { box-sizing: border-box; }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background:
+          radial-gradient(circle at 20% 0%, rgba(245, 184, 75, 0.18), transparent 32rem),
+          linear-gradient(135deg, #0d151c 0%, #14242e 55%, #241b13 100%);
+        color: var(--ink);
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      }
+
+      main {
+        width: min(1180px, calc(100vw - 32px));
+        margin: 0 auto;
+        padding: 36px 0;
+      }
+
+      header {
+        display: flex;
+        align-items: end;
+        justify-content: space-between;
+        gap: 24px;
+        margin-bottom: 28px;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: clamp(32px, 5vw, 68px);
+        letter-spacing: -0.07em;
+      }
+
+      .subtitle {
+        max-width: 660px;
+        color: var(--muted);
+        line-height: 1.55;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: 360px 1fr;
+        gap: 18px;
+      }
+
+      section {
+        border: 1px solid var(--line);
+        background: var(--panel);
+        border-radius: 24px;
+        box-shadow: 0 24px 70px rgba(0, 0, 0, 0.28);
+      }
+
+      .controls {
+        padding: 22px;
+        position: sticky;
+        top: 18px;
+      }
+
+      label {
+        display: grid;
+        gap: 8px;
+        color: var(--muted);
+        font-size: 13px;
+        margin-bottom: 16px;
+      }
+
+      select, button {
+        width: 100%;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        background: #0f1a22;
+        color: var(--ink);
+        padding: 12px 14px;
+        font: inherit;
+      }
+
+      button {
+        cursor: pointer;
+        background: var(--accent);
+        color: #1b1308;
+        border: none;
+        font-weight: 800;
+        margin-top: 10px;
+      }
+
+      .check {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        border-top: 1px solid var(--line);
+        padding: 12px 0;
+        margin: 0;
+      }
+
+      .check input {
+        width: 20px;
+        height: 20px;
+        accent-color: var(--accent);
+      }
+
+      .output {
+        overflow: hidden;
+      }
+
+      .summary {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 1px;
+        background: var(--line);
+      }
+
+      .metric {
+        background: rgba(16, 24, 32, 0.88);
+        padding: 18px;
+      }
+
+      .metric span {
+        display: block;
+        color: var(--muted);
+        font-size: 12px;
+        margin-bottom: 8px;
+      }
+
+      .metric strong {
+        font-size: 18px;
+      }
+
+      .timeline {
+        padding: 22px;
+        display: grid;
+        gap: 12px;
+      }
+
+      .event {
+        display: grid;
+        grid-template-columns: 72px 1fr;
+        gap: 16px;
+        padding: 14px;
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        background: rgba(8, 15, 20, 0.45);
+      }
+
+      .seq {
+        color: var(--accent);
+        font-weight: 800;
+      }
+
+      .type {
+        font-weight: 800;
+      }
+
+      .payload {
+        margin-top: 8px;
+        color: var(--muted);
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        font-size: 12px;
+      }
+
+      .good { color: var(--good); }
+      .bad { color: var(--bad); }
+
+      @media (max-width: 860px) {
+        header, .grid { display: block; }
+        .controls { position: static; margin-bottom: 18px; }
+        .summary { grid-template-columns: repeat(2, 1fr); }
+      }
     </style>
   </head>
   <body>
     <main>
-      <h1>Cashblocks Terminal Shell</h1>
-      <p>Simulator journal from the ATM basic flow.</p>
-      <pre>${escapeHtml(journal)}</pre>
+      <header>
+        <div>
+          <h1>Cashblocks Shell</h1>
+          <p class="subtitle">Run the ATM demo flow against simulated terminal devices. Flip faults, run a transaction, and inspect the journal timeline.</p>
+        </div>
+      </header>
+
+      <div class="grid">
+        <section class="controls">
+          <label>
+            Transaction
+            <select id="transaction">
+              <option>BalanceInquiry</option>
+              <option>CashWithdrawal</option>
+              <option>CashDeposit</option>
+              <option>FastCash</option>
+              <option>CardlessWithdrawal</option>
+              <option>AdminBalanceTerminal</option>
+              <option>AdminCashAdjustment</option>
+              <option>AdminPrintTotals</option>
+            </select>
+          </label>
+
+          <label class="check">Receipt printer out <input id="receiptPrinterOut" type="checkbox"></label>
+          <label class="check">Host declined <input id="hostDeclined" type="checkbox"></label>
+          <label class="check">Dispenser offline <input id="dispenserOffline" type="checkbox"></label>
+          <label class="check">Acceptor offline <input id="acceptorOffline" type="checkbox"></label>
+          <label class="check">Card reader offline <input id="cardReaderOffline" type="checkbox"></label>
+
+          <label>
+            Receipt warning answer
+            <select id="receiptWarningAnswer">
+              <option>YES</option>
+              <option>NO</option>
+            </select>
+          </label>
+
+          <button id="run">Run flow</button>
+        </section>
+
+        <section class="output">
+          <div class="summary" id="summary"></div>
+          <div class="timeline" id="timeline"></div>
+        </section>
+      </div>
     </main>
+
+    <script>
+      const $ = (id) => document.getElementById(id);
+
+      $("run").addEventListener("click", run);
+      run();
+
+      async function run() {
+        $("run").disabled = true;
+        $("run").textContent = "Running...";
+        try {
+          const response = await fetch("/api/run", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              transaction: $("transaction").value,
+              receiptPrinterOut: $("receiptPrinterOut").checked,
+              hostDeclined: $("hostDeclined").checked,
+              dispenserOffline: $("dispenserOffline").checked,
+              acceptorOffline: $("acceptorOffline").checked,
+              cardReaderOffline: $("cardReaderOffline").checked,
+              receiptWarningAnswer: $("receiptWarningAnswer").value
+            })
+          });
+          render(await response.json());
+        } finally {
+          $("run").disabled = false;
+          $("run").textContent = "Run flow";
+        }
+      }
+
+      function render(result) {
+        const summary = result.summary;
+        $("summary").innerHTML = [
+          metric("Package", summary.packageId),
+          metric("Transaction", summary.selectedTransaction || "none"),
+          metric("Status", summary.failed ? "<span class='bad'>failed</span>" : "<span class='good'>completed</span>"),
+          metric("Events", String(summary.eventCount))
+        ].join("");
+
+        $("timeline").innerHTML = result.events.map((event) => {
+          const payload = event.payload ? JSON.stringify(event.payload, null, 2) : "";
+          return "<article class='event'>" +
+            "<div class='seq'>#" + event.seq + "</div>" +
+            "<div><div class='type'>" + escapeHtml(event.type) + "</div>" +
+            "<div class='payload'>" + escapeHtml(payload) + "</div></div>" +
+            "</article>";
+        }).join("");
+      }
+
+      function metric(label, value) {
+        return "<div class='metric'><span>" + label + "</span><strong>" + value + "</strong></div>";
+      }
+
+      function escapeHtml(value) {
+        return String(value)
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;");
+      }
+    </script>
   </body>
-</html>`);
-});
-
-server.listen(4173, () => {
-  console.log("Cashblocks terminal shell listening on http://localhost:4173");
-});
-
-function escapeHtml(value: string): string {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;");
+</html>`;
 }
