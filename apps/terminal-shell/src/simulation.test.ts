@@ -24,3 +24,13 @@ test("surfaces declined host simulations", async () => {
   assert.equal(result.summary.failed, true);
   assert.equal(result.summary.failureCode, "HOST_DECLINED");
 });
+
+test("surfaces card reader failures before transaction selection", async () => {
+  const result = await runSimulation({
+    transaction: "CashWithdrawal",
+    cardReaderOffline: true
+  });
+
+  assert.equal(result.summary.failed, true);
+  assert.equal(result.summary.failureCode, "CARD_READER_OFFLINE");
+});

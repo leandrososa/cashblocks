@@ -77,7 +77,7 @@ export default defineFlow(
         Customer.PinCheckChipProcessing = false;
       } else {
         CoreSession.SetupDefaultAccount();
-        Customer.PinEntry();
+        await Customer.PinEntry();
       }
 
       Cashblocks.LogJournalLine(`LanguageUsed: ${Cashblocks.LocalLanguage.CurrentLanguage}`);

@@ -48,3 +48,23 @@ test("cash withdrawal fails when host adapter declines", async () => {
     true
   );
 });
+
+test("customer pin entry fails when card reader is offline", async () => {
+  const runtime = new CashblocksRuntime();
+  const modules = createAtmModules(runtime);
+  runtime.Simulator.cardReaderOnline = false;
+
+  await assert.rejects(
+    () => modules.Customer.PinEntry(),
+    /Card reader is offline/
+  );
+
+  assert.equal(
+    runtime.Journal.all().some(
+      (event) =>
+        event.type === "transaction.failed" &&
+        event.payload?.code === "CARD_READER_OFFLINE"
+    ),
+    true
+  );
+});

@@ -57,7 +57,23 @@ export class CustomerModule extends AtmModule {
     return this.runtime.result(true, "CUSTOMER_READY", "Customer module ready.");
   }
 
-  PinEntry(): void {
+  async PinEntry(): Promise<void> {
+    const cardRead = await this.runtime.Adapters.cardReader.readCard();
+
+    if (!cardRead.ok) {
+      this.runtime.Journal.append({
+        type: "transaction.failed",
+        source: "module",
+        sessionId: this.runtime.SessionId,
+        payload: {
+          transaction: "CustomerIdentification",
+          code: cardRead.code,
+          message: cardRead.message
+        }
+      });
+      throw new Error(cardRead.message);
+    }
+
     this.runtime.Journal.append({
       type: "ui.prompt",
       source: "module",

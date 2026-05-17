@@ -13,7 +13,7 @@ The first supported adapter set is:
 - `ReceiptPrinterAdapter`: reads printer/paper status and prints receipt lines.
 - `CashDispenserAdapter`: dispenses cash for withdrawal modules.
 - `CashAcceptorAdapter`: accepts cash for deposit modules.
-- `CardReaderAdapter`: reads card data or reports reader failures.
+- `CardReaderAdapter`: reads card data before PIN entry or reports reader failures.
 - `HostAuthorizationAdapter`: approves or declines transaction authorization.
 
 `packages/runtime-core` ships simulator implementations for each contract. Real
