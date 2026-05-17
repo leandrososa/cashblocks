@@ -19,6 +19,7 @@ export type SimulationSummary = {
   packageId: string;
   packageVersion: string;
   selectedTransaction?: string;
+  status: "completed" | "failed" | "cancelled" | "idle";
   completed: boolean;
   failed: boolean;
   failureCode?: string;
@@ -73,6 +74,9 @@ export function summarizeEvents(events: RuntimeEvent[], flowOk = true): Simulati
   const warning = events.find(
     (event) => event.type === "ui.prompt" && event.payload?.screen === "PrinterDown"
   );
+  const failedState = !flowOk || Boolean(failed);
+  const completedState = Boolean(completed);
+  const cancelledState = Boolean(warning) && !selected && !failedState && !completedState;
 
   return {
     packageId: flowPackage.id,
@@ -81,8 +85,15 @@ export function summarizeEvents(events: RuntimeEvent[], flowOk = true): Simulati
       typeof selected?.payload?.transaction === "string"
         ? selected.payload.transaction
         : undefined,
-    completed: Boolean(completed),
-    failed: !flowOk || Boolean(failed),
+    status: failedState
+      ? "failed"
+      : completedState
+        ? "completed"
+        : cancelledState
+          ? "cancelled"
+          : "idle",
+    completed: completedState,
+    failed: failedState,
     failureCode:
       typeof failed?.payload?.code === "string"
         ? failed.payload.code

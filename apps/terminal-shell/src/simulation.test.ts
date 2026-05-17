@@ -11,6 +11,7 @@ test("runs a successful cash withdrawal simulation", async () => {
   const result = await runSimulation({ transaction: "CashWithdrawal" });
 
   assert.equal(result.summary.selectedTransaction, "CashWithdrawal");
+  assert.equal(result.summary.status, "completed");
   assert.equal(result.summary.completed, true);
   assert.equal(result.summary.failed, false);
 });
@@ -22,6 +23,7 @@ test("surfaces declined host simulations", async () => {
   });
 
   assert.equal(result.summary.failed, true);
+  assert.equal(result.summary.status, "failed");
   assert.equal(result.summary.failureCode, "HOST_DECLINED");
 });
 
@@ -67,5 +69,6 @@ test("surfaces receipt warning cancellation without selecting a transaction", as
   assert.equal(result.summary.selectedTransaction, undefined);
   assert.equal(result.summary.completed, false);
   assert.equal(result.summary.failed, false);
+  assert.equal(result.summary.status, "cancelled");
   assert.equal(result.summary.warningOffered, true);
 });

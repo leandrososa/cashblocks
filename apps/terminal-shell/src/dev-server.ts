@@ -343,7 +343,7 @@ function renderApp(): string {
         $("summary").innerHTML = [
           metric("Package", summary.packageId),
           metric("Transaction", summary.selectedTransaction || "none"),
-          metric("Status", summary.failed ? "<span class='bad'>failed</span>" : "<span class='good'>completed</span>"),
+          metric("Status", statusLabel(summary.status)),
           metric("Events", String(summary.eventCount))
         ].join("");
 
@@ -359,6 +359,12 @@ function renderApp(): string {
 
       function metric(label, value) {
         return "<div class='metric'><span>" + label + "</span><strong>" + value + "</strong></div>";
+      }
+
+      function statusLabel(status) {
+        if (status === "failed") return "<span class='bad'>failed</span>";
+        if (status === "completed") return "<span class='good'>completed</span>";
+        return escapeHtml(status);
       }
 
       function escapeHtml(value) {
