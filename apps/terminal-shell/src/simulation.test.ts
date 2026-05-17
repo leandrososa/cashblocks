@@ -34,3 +34,38 @@ test("surfaces card reader failures before transaction selection", async () => {
   assert.equal(result.summary.failed, true);
   assert.equal(result.summary.failureCode, "CARD_READER_OFFLINE");
 });
+
+test("surfaces dispenser failures for cash withdrawal", async () => {
+  const result = await runSimulation({
+    transaction: "CashWithdrawal",
+    dispenserOffline: true
+  });
+
+  assert.equal(result.summary.selectedTransaction, "CashWithdrawal");
+  assert.equal(result.summary.failed, true);
+  assert.equal(result.summary.failureCode, "DISPENSER_OFFLINE");
+});
+
+test("surfaces acceptor failures for cash deposit", async () => {
+  const result = await runSimulation({
+    transaction: "CashDeposit",
+    acceptorOffline: true
+  });
+
+  assert.equal(result.summary.selectedTransaction, "CashDeposit");
+  assert.equal(result.summary.failed, true);
+  assert.equal(result.summary.failureCode, "ACCEPTOR_OFFLINE");
+});
+
+test("surfaces receipt warning cancellation without selecting a transaction", async () => {
+  const result = await runSimulation({
+    transaction: "BalanceInquiry",
+    receiptPrinterOut: true,
+    receiptWarningAnswer: "NO"
+  });
+
+  assert.equal(result.summary.selectedTransaction, undefined);
+  assert.equal(result.summary.completed, false);
+  assert.equal(result.summary.failed, false);
+  assert.equal(result.summary.warningOffered, true);
+});
