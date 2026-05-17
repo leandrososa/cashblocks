@@ -30,6 +30,10 @@ The core rule is that flow code decides ordering and customer-specific policy,
 while modules and runtime own transaction mechanics, state recording, device
 status, and journaled truth.
 
+Flow lifecycle errors are captured by the SDK and appended as `flow.failed`
+events. A broken flow should produce diagnosis in the journal instead of
+crashing without context.
+
 ## Adapter Boundary
 
 The MVP ships simulator adapters only. Real integrations such as CEN/XFS,

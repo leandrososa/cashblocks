@@ -61,12 +61,12 @@ export async function runSimulation(request: SimulationRequest = {}): Promise<Si
   const events = result.runtime.Journal.all();
   return {
     manifest: flowPackage,
-    summary: summarizeEvents(events),
+    summary: summarizeEvents(events, result.ok),
     events
   };
 }
 
-export function summarizeEvents(events: RuntimeEvent[]): SimulationSummary {
+export function summarizeEvents(events: RuntimeEvent[], flowOk = true): SimulationSummary {
   const selected = events.find((event) => event.type === "transaction.selected");
   const failed = events.find((event) => event.type === "transaction.failed");
   const completed = events.find((event) => event.type === "transaction.completed");
@@ -82,9 +82,13 @@ export function summarizeEvents(events: RuntimeEvent[]): SimulationSummary {
         ? selected.payload.transaction
         : undefined,
     completed: Boolean(completed),
-    failed: Boolean(failed),
+    failed: !flowOk || Boolean(failed),
     failureCode:
-      typeof failed?.payload?.code === "string" ? failed.payload.code : undefined,
+      typeof failed?.payload?.code === "string"
+        ? failed.payload.code
+        : !flowOk
+          ? "FLOW_FAILED"
+          : undefined,
     warningOffered: Boolean(warning),
     eventCount: events.length
   };

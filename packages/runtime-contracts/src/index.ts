@@ -13,6 +13,7 @@ export type CustomerType = "OnUs" | "Local" | "TOUCH" | "OperatorAdmin" | "Unkno
 export type RuntimeEventType =
   | "runtime.started"
   | "flow.loaded"
+  | "flow.failed"
   | "session.started"
   | "transaction.selected"
   | "transaction.started"

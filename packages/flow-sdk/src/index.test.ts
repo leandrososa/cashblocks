@@ -20,3 +20,33 @@ test("defineFlow receives fresh globals for each run", async () => {
 
   assert.deepEqual(sessionIds, ["0", "1"]);
 });
+
+test("runFlow journals lifecycle failures instead of throwing", async () => {
+  const flow = defineFlow(() => ({
+    OnIdle() {
+      throw new Error("screen renderer exploded");
+    }
+  }));
+
+  const result = await runFlow(flow);
+  const failure = result.runtime.Journal.all().find((event) => event.type === "flow.failed");
+
+  assert.equal(result.ok, false);
+  assert.equal(result.error?.phase, "OnIdle");
+  assert.equal(failure?.payload?.message, "screen renderer exploded");
+});
+
+test("runFlow journals factory failures instead of throwing", async () => {
+  const flow = defineFlow(() => {
+    throw new Error("bad flow factory");
+  });
+
+  const result = await runFlow(flow);
+
+  assert.equal(result.ok, false);
+  assert.equal(result.error?.phase, "factory");
+  assert.equal(
+    result.runtime.Journal.all().some((event) => event.type === "flow.failed"),
+    true
+  );
+});

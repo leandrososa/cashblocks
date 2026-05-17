@@ -24,8 +24,13 @@ export type FlowRunOptions = {
 };
 
 export type FlowRunResult = {
+  ok: boolean;
   runtime: CashblocksRuntime;
   globals: FlowGlobals;
+  error?: {
+    phase: "configure" | "factory" | "OnStartOfDay" | "OnIdle";
+    message: string;
+  };
 };
 
 export function defineFlow(factory: FlowFactory): FlowModule {
@@ -49,8 +54,6 @@ export async function runFlow(flow: FlowModule, options: FlowRunOptions = {}): P
     ...modules
   };
 
-  options.configure?.(globals);
-  const lifecycle = flow.__cashblocksFlowFactory ? flow.__cashblocksFlowFactory(globals) : flow;
   const manifestIssues = options.flowPackage ? validateFlowManifest(options.flowPackage) : [];
 
   if (manifestIssues.length > 0) {
@@ -74,8 +77,60 @@ export async function runFlow(flow: FlowModule, options: FlowRunOptions = {}): P
       : { entrypoint: "module" }
   });
 
-  await lifecycle.OnStartOfDay?.();
-  await lifecycle.OnIdle?.();
+  let lifecycle: FlowModule = flow;
 
-  return { runtime, globals };
+  try {
+    options.configure?.(globals);
+  } catch (error) {
+    return failFlow({ runtime, globals, phase: "configure", error });
+  }
+
+  try {
+    lifecycle = flow.__cashblocksFlowFactory ? flow.__cashblocksFlowFactory(globals) : flow;
+  } catch (error) {
+    return failFlow({ runtime, globals, phase: "factory", error });
+  }
+
+  try {
+    await lifecycle.OnStartOfDay?.();
+  } catch (error) {
+    return failFlow({ runtime, globals, phase: "OnStartOfDay", error });
+  }
+
+  try {
+    await lifecycle.OnIdle?.();
+  } catch (error) {
+    return failFlow({ runtime, globals, phase: "OnIdle", error });
+  }
+
+  return { ok: true, runtime, globals };
+}
+
+function failFlow(input: {
+  runtime: CashblocksRuntime;
+  globals: FlowGlobals;
+  phase: "configure" | "factory" | "OnStartOfDay" | "OnIdle";
+  error: unknown;
+}): FlowRunResult {
+  const message = input.error instanceof Error ? input.error.message : String(input.error);
+
+  input.runtime.Journal.append({
+    type: "flow.failed",
+    source: "runtime",
+    sessionId: input.runtime.SessionId,
+    payload: {
+      phase: input.phase,
+      message
+    }
+  });
+
+  return {
+    ok: false,
+    runtime: input.runtime,
+    globals: input.globals,
+    error: {
+      phase: input.phase,
+      message
+    }
+  };
 }
