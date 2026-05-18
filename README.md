@@ -23,6 +23,7 @@ bun run build
 bun run test
 bun run example:atm
 bun run dev
+bun run demo
 ```
 
 `bun run dev` starts a local browser shell with simulator controls and a journal
@@ -30,6 +31,9 @@ timeline at `http://localhost:4173`.
 
 Set `CASHBLOCKS_JOURNAL_PATH=./data/runtime.journal.jsonl` before `bun run dev`
 to persist runs and view them in the shell's Journal History tab.
+
+`bun run demo` starts the same shell with durable demo history enabled at
+`./data/demo.journal.jsonl`.
 
 ## Flow Packages
 

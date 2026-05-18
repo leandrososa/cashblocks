@@ -251,6 +251,45 @@ function renderApp(): string {
         background: var(--line);
       }
 
+      .terminal-screen {
+        margin: 22px;
+        padding: 28px;
+        min-height: 220px;
+        border: 1px solid rgba(245, 184, 75, 0.38);
+        border-radius: 22px;
+        background:
+          radial-gradient(circle at 85% 20%, rgba(245, 184, 75, 0.14), transparent 18rem),
+          linear-gradient(160deg, #091017 0%, #0f2029 100%);
+      }
+
+      .terminal-screen .eyebrow {
+        color: var(--accent);
+        text-transform: uppercase;
+        letter-spacing: 0.14em;
+        font-size: 12px;
+        margin-bottom: 18px;
+      }
+
+      .terminal-screen h2 {
+        margin: 0;
+        font-size: clamp(30px, 4vw, 54px);
+        letter-spacing: -0.06em;
+      }
+
+      .terminal-screen p {
+        max-width: 720px;
+        color: var(--muted);
+        line-height: 1.55;
+      }
+
+      .operator-note {
+        margin-top: 18px;
+        padding-top: 18px;
+        border-top: 1px solid var(--line);
+        color: var(--muted);
+        font-size: 13px;
+      }
+
       .metric {
         background: rgba(16, 24, 32, 0.88);
         padding: 18px;
@@ -379,6 +418,7 @@ function renderApp(): string {
 
         <section class="output">
           <div class="summary" id="summary"></div>
+          <div class="terminal-screen" id="terminalScreen"></div>
           <div class="timeline" id="timeline"></div>
         </section>
       </div>
@@ -448,6 +488,12 @@ function renderApp(): string {
           metric("Status", statusLabel(summary.status)),
           metric("Events", String(summary.eventCount))
         ].join("");
+
+        $("terminalScreen").innerHTML =
+          "<div class='eyebrow'>Terminal screen</div>" +
+          "<h2>" + escapeHtml(summary.screenTitle) + "</h2>" +
+          "<p>" + escapeHtml(summary.screenMessage) + "</p>" +
+          "<div class='operator-note'>" + escapeHtml(summary.operatorMessage) + "</div>";
 
         $("timeline").innerHTML = result.events.map((event) => {
           const payload = event.payload ? JSON.stringify(event.payload, null, 2) : "";

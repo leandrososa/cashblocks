@@ -20,6 +20,9 @@ export type SimulationSummary = {
   packageVersion: string;
   selectedTransaction?: string;
   status: "completed" | "failed" | "cancelled" | "idle";
+  screenTitle: string;
+  screenMessage: string;
+  operatorMessage: string;
   completed: boolean;
   failed: boolean;
   failureCode?: string;
@@ -89,32 +92,127 @@ export function summarizeEvents(events: RuntimeEvent[], flowOk = true): Simulati
   const failedState = !flowOk || Boolean(failed);
   const completedState = Boolean(completed);
   const cancelledState = Boolean(warning) && !selected && !failedState && !completedState;
+  const selectedTransaction =
+    typeof selected?.payload?.transaction === "string"
+      ? selected.payload.transaction
+      : undefined;
+  const failureCode =
+    typeof failed?.payload?.code === "string"
+      ? failed.payload.code
+      : !flowOk
+        ? "FLOW_FAILED"
+        : undefined;
+  const status = failedState
+    ? "failed"
+    : completedState
+      ? "completed"
+      : cancelledState
+        ? "cancelled"
+        : "idle";
+  const terminalScreen = createTerminalScreen({
+    status,
+    selectedTransaction,
+    failureCode,
+    warningOffered: Boolean(warning)
+  });
 
   return {
     packageId: flowPackage.id,
     packageVersion: flowPackage.version,
-    selectedTransaction:
-      typeof selected?.payload?.transaction === "string"
-        ? selected.payload.transaction
-        : undefined,
-    status: failedState
-      ? "failed"
-      : completedState
-        ? "completed"
-        : cancelledState
-          ? "cancelled"
-          : "idle",
+    selectedTransaction,
+    status,
+    screenTitle: terminalScreen.title,
+    screenMessage: terminalScreen.message,
+    operatorMessage: terminalScreen.operatorMessage,
     completed: completedState,
     failed: failedState,
-    failureCode:
-      typeof failed?.payload?.code === "string"
-        ? failed.payload.code
-        : !flowOk
-          ? "FLOW_FAILED"
-          : undefined,
+    failureCode,
     warningOffered: Boolean(warning),
     eventCount: events.length
   };
+}
+
+function createTerminalScreen(input: {
+  status: SimulationSummary["status"];
+  selectedTransaction?: string;
+  failureCode?: string;
+  warningOffered: boolean;
+}): { title: string; message: string; operatorMessage: string } {
+  if (input.status === "completed") {
+    return {
+      title: `${formatTransaction(input.selectedTransaction)} complete`,
+      message: "Thank you. Your transaction has finished successfully.",
+      operatorMessage: "Flow completed without simulated device or host faults."
+    };
+  }
+
+  if (input.status === "cancelled") {
+    return {
+      title: "Transaction cancelled",
+      message: input.warningOffered
+        ? "Receipt printing is unavailable. The customer chose not to continue."
+        : "The customer cancelled before a transaction was selected.",
+      operatorMessage: "No transaction was selected after the warning path."
+    };
+  }
+
+  if (input.status === "failed") {
+    return failureScreen(input.failureCode);
+  }
+
+  return {
+    title: "Waiting for customer",
+    message: "Select a transaction to begin.",
+    operatorMessage: "Runtime is idle."
+  };
+}
+
+function failureScreen(code?: string): { title: string; message: string; operatorMessage: string } {
+  if (code === "HOST_DECLINED") {
+    return {
+      title: "Transaction declined",
+      message: "The authorization host declined this transaction.",
+      operatorMessage: "Host authorization returned HOST_DECLINED."
+    };
+  }
+
+  if (code === "DISPENSER_OFFLINE") {
+    return {
+      title: "Cash unavailable",
+      message: "This terminal cannot dispense cash right now.",
+      operatorMessage: "Cash dispenser adapter reported DISPENSER_OFFLINE."
+    };
+  }
+
+  if (code === "ACCEPTOR_OFFLINE") {
+    return {
+      title: "Deposit unavailable",
+      message: "This terminal cannot accept cash right now.",
+      operatorMessage: "Cash acceptor adapter reported ACCEPTOR_OFFLINE."
+    };
+  }
+
+  if (code === "CARD_READER_OFFLINE") {
+    return {
+      title: "Card reader unavailable",
+      message: "This terminal cannot read cards right now.",
+      operatorMessage: "Card reader adapter reported CARD_READER_OFFLINE."
+    };
+  }
+
+  return {
+    title: "Transaction failed",
+    message: "The transaction could not be completed.",
+    operatorMessage: code ? `Failure code: ${code}.` : "Runtime reported an unknown failure."
+  };
+}
+
+function formatTransaction(transaction?: string): string {
+  if (!transaction) {
+    return "Transaction";
+  }
+
+  return transaction.replace(/([a-z])([A-Z])/g, "$1 $2");
 }
 
 export async function readJournalHistory(journalPath?: string): Promise<JournalHistory> {
