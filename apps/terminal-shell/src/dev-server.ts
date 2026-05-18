@@ -209,6 +209,28 @@ function renderApp(): string {
         margin-bottom: 18px;
       }
 
+      .package-card {
+        padding: 18px;
+        margin-bottom: 18px;
+      }
+
+      .chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 12px;
+      }
+
+      .chip {
+        display: inline-flex;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        padding: 6px 10px;
+        color: var(--muted);
+        background: rgba(8, 15, 20, 0.38);
+        font-size: 12px;
+      }
+
       .tab {
         width: auto;
         padding: 10px 14px;
@@ -320,6 +342,10 @@ function renderApp(): string {
 
       <div class="grid" id="runView">
         <section class="controls">
+          <section class="package-card" id="packageCard">
+            <strong>Loading package...</strong>
+          </section>
+
           <label>
             Transaction
             <select id="transaction">
@@ -369,6 +395,7 @@ function renderApp(): string {
       $("run").addEventListener("click", run);
       $("runTab").addEventListener("click", () => showTab("run"));
       $("historyTab").addEventListener("click", () => showTab("history"));
+      loadManifest();
       run();
 
       function showTab(tab) {
@@ -403,6 +430,11 @@ function renderApp(): string {
         }
       }
 
+      async function loadManifest() {
+        const response = await fetch("/api/manifest");
+        renderManifest(await response.json());
+      }
+
       async function loadHistory() {
         const response = await fetch("/api/journal");
         renderHistory(await response.json());
@@ -425,6 +457,18 @@ function renderApp(): string {
             "<div class='payload'>" + escapeHtml(payload) + "</div></div>" +
             "</article>";
         }).join("");
+      }
+
+      function renderManifest(manifest) {
+        $("packageCard").innerHTML =
+          "<strong>" + escapeHtml(manifest.id) + "@" + escapeHtml(manifest.version) + "</strong>" +
+          "<div class='payload'>" + escapeHtml(manifest.description || "") + "</div>" +
+          "<div class='chips'>" + (manifest.capabilities || []).map((capability) =>
+            "<span class='chip'>" + escapeHtml(capability) + "</span>"
+          ).join("") + "</div>" +
+          "<div class='chips'>" + (manifest.modules || []).map((moduleName) =>
+            "<span class='chip'>" + escapeHtml(moduleName) + "</span>"
+          ).join("") + "</div>";
       }
 
       function renderHistory(history) {
