@@ -155,6 +155,26 @@ export type FlowPackage = {
   modules?: string[];
 };
 
+export const knownFlowCapabilities = [
+  "receipt-printer",
+  "cash-dispenser",
+  "cash-acceptor",
+  "card-reader",
+  "host-authorization"
+] as const;
+
+export const knownAtmModules = [
+  "Idle",
+  "Customer",
+  "CoreSession",
+  "BalanceInquiry",
+  "CashWithdrawal",
+  "CardlessCashWithdrawal",
+  "CashDeposit",
+  "FastCash",
+  "TerminalAdmin"
+] as const;
+
 export function validateFlowPackage(flowPackage: FlowPackage): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
 
@@ -172,6 +192,26 @@ export function validateFlowPackage(flowPackage: FlowPackage): ValidationIssue[]
 
   if (!Array.isArray(flowPackage.capabilities)) {
     issues.push({ field: "capabilities", message: "Capabilities must be an array." });
+  } else {
+    for (const capability of flowPackage.capabilities) {
+      if (!(knownFlowCapabilities as readonly string[]).includes(capability)) {
+        issues.push({
+          field: "capabilities",
+          message: `Unknown capability: ${capability}.`
+        });
+      }
+    }
+  }
+
+  if (flowPackage.modules) {
+    for (const moduleName of flowPackage.modules) {
+      if (!(knownAtmModules as readonly string[]).includes(moduleName)) {
+        issues.push({
+          field: "modules",
+          message: `Unknown module: ${moduleName}.`
+        });
+      }
+    }
   }
 
   return issues;

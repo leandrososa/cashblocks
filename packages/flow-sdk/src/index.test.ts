@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { defineFlow, runFlow } from "./index.js";
+import { defineFlow, runFlow, validateFlowManifest } from "./index.js";
 
 test("defineFlow receives fresh globals for each run", async () => {
   const sessionIds: string[] = [];
@@ -48,5 +48,20 @@ test("runFlow journals factory failures instead of throwing", async () => {
   assert.equal(
     result.runtime.Journal.all().some((event) => event.type === "flow.failed"),
     true
+  );
+});
+
+test("validateFlowManifest rejects unknown capabilities and modules", () => {
+  const issues = validateFlowManifest({
+    id: "bad.flow",
+    version: "0.1.0",
+    entrypoint: "src/flow.ts",
+    capabilities: ["teleport-cash"],
+    modules: ["ImaginaryModule"]
+  });
+
+  assert.deepEqual(
+    issues.map((issue) => issue.message),
+    ["Unknown capability: teleport-cash.", "Unknown module: ImaginaryModule."]
   );
 });
