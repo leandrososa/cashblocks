@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Cashblocks Terminal Shell</title>
+    <link rel="stylesheet" href="/style.css">
+  </head>
+  <body>
+    <main>
+      <header>
+        <div>
+          <h1>Cashblocks Shell</h1>
+          <p class="subtitle">Run the ATM demo flow against simulated terminal devices. Flip faults, press terminal buttons, and inspect the journal timeline.</p>
+        </div>
+      </header>
+
+      <div class="tabs">
+        <button class="tab active" id="runTab">Run Simulation</button>
+        <button class="tab" id="historyTab">Journal History</button>
+      </div>
+
+      <div class="grid" id="runView">
+        <section class="controls">
+          <section class="package-card" id="packageCard">
+            <strong>Loading package...</strong>
+          </section>
+
+          <label>
+            Transaction
+            <select id="transaction">
+              <option>BalanceInquiry</option>
+              <option>CashWithdrawal</option>
+              <option>CashDeposit</option>
+              <option>FastCash</option>
+              <option>CardlessWithdrawal</option>
+              <option>AdminBalanceTerminal</option>
+              <option>AdminCashAdjustment</option>
+              <option>AdminPrintTotals</option>
+            </select>
+          </label>
+
+          <label class="check">Receipt printer out <input id="receiptPrinterOut" type="checkbox"></label>
+          <label class="check">Host declined <input id="hostDeclined" type="checkbox"></label>
+          <label class="check">Dispenser offline <input id="dispenserOffline" type="checkbox"></label>
+          <label class="check">Acceptor offline <input id="acceptorOffline" type="checkbox"></label>
+          <label class="check">Card reader offline <input id="cardReaderOffline" type="checkbox"></label>
+
+          <label>
+            Receipt warning answer
+            <select id="receiptWarningAnswer">
+              <option>YES</option>
+              <option>NO</option>
+            </select>
+          </label>
+
+          <button id="run">Reset terminal</button>
+        </section>
+
+        <section class="output">
+          <div class="summary" id="summary"></div>
+          <div class="terminal-screen" id="terminalScreen"></div>
+          <div class="timeline" id="timeline"></div>
+        </section>
+      </div>
+
+      <section class="output" id="historyView" hidden>
+        <div class="summary" id="historySummary"></div>
+        <div class="timeline" id="history"></div>
+      </section>
+    </main>
+    <script src="/app.js" defer></script>
+  </body>
+</html>
