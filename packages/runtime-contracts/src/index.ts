@@ -23,6 +23,7 @@ export type RuntimeEventType =
   | "host.authorization_requested"
   | "host.authorization_result"
   | "journal.line_logged"
+  | "ui.input_received"
   | "ui.prompt";
 
 export type RuntimeEvent = {
@@ -134,6 +135,31 @@ export type RuntimeApi = {
   LocalLanguage: {
     CurrentLanguage: string;
   };
+};
+
+export type CustomerPrompt =
+  | {
+      kind: "pin";
+      prompt: string;
+    }
+  | {
+      kind: "transaction";
+      prompt: string;
+      options: string[];
+    }
+  | {
+      kind: "option";
+      screen: string;
+      prompt: string;
+      options: string[];
+    };
+
+export type CustomerPromptAnswer = {
+  value: string;
+};
+
+export type CustomerInteraction = {
+  request(prompt: CustomerPrompt): Promise<CustomerPromptAnswer>;
 };
 
 export type FlowLifecycle = {

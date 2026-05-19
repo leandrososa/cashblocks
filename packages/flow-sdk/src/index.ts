@@ -1,6 +1,11 @@
 import type { FlowPackage, RuntimeApi, ValidationIssue } from "../../runtime-contracts/src/index.js";
 import { validateFlowPackage } from "../../runtime-contracts/src/index.js";
-import { CashblocksRuntime, RuntimeSimulator, type RuntimeSimulatorOptions } from "../../runtime-core/src/index.js";
+import {
+  CashblocksRuntime,
+  RuntimeSimulator,
+  type CashblocksRuntimeOptions,
+  type RuntimeSimulatorOptions
+} from "../../runtime-core/src/index.js";
 import { createAtmModules, type AtmModules } from "../../atm-modules/src/index.js";
 
 export type FlowGlobals = AtmModules & {
@@ -18,6 +23,8 @@ export type FlowFactory = (globals: FlowGlobals) => FlowModule;
 
 export type FlowRunOptions = {
   simulator?: RuntimeSimulatorOptions;
+  runtime?: CashblocksRuntime;
+  runtimeOptions?: CashblocksRuntimeOptions;
   journalPath?: string;
   flowPackage?: FlowPackage;
   configure?(globals: FlowGlobals): void;
@@ -44,10 +51,13 @@ export function validateFlowManifest(flowPackage: FlowPackage): ValidationIssue[
 }
 
 export async function runFlow(flow: FlowModule, options: FlowRunOptions = {}): Promise<FlowRunResult> {
-  const runtime = new CashblocksRuntime({
-    simulator: new RuntimeSimulator(options.simulator),
-    journalPath: options.journalPath
-  });
+  const runtime =
+    options.runtime ??
+    new CashblocksRuntime({
+      ...options.runtimeOptions,
+      simulator: options.runtimeOptions?.simulator ?? new RuntimeSimulator(options.simulator),
+      journalPath: options.journalPath ?? options.runtimeOptions?.journalPath
+    });
   const modules = createAtmModules(runtime);
   const globals: FlowGlobals = {
     Cashblocks: runtime.Cashblocks,

@@ -91,7 +91,7 @@ export default defineFlow(
         const receiptWarningOffered = Cashblocks.ScratchPad.Get("ReceiptWarningOffered");
         if (!receiptWarningOffered && isReceiptPrinterUnavailable()) {
           Cashblocks.ScratchPad.Set("ReceiptWarningOffered", true);
-          if (!OfferReceiptWarning()) {
+          if (!(await OfferReceiptWarning())) {
             return;
           }
         }
@@ -99,7 +99,7 @@ export default defineFlow(
         CoreSession.NewTransaction();
         SetCashAdjustmentOptions();
 
-        const transaction = cardless ? Idle.TouchActivationParameter : Customer.SelectTransaction();
+        const transaction = cardless ? Idle.TouchActivationParameter : await Customer.SelectTransaction();
         Cashblocks.Log(`TRANSACTION SELECTED:${transaction}`);
 
         if (transaction === "CardlessWithdrawal") {
@@ -155,8 +155,8 @@ export default defineFlow(
       }
     }
 
-    function OfferReceiptWarning(): boolean {
-      return Customer.SelectOption("PrinterDown", "YES,NO") !== "NO";
+    async function OfferReceiptWarning(): Promise<boolean> {
+      return (await Customer.SelectOption("PrinterDown", "YES,NO")) !== "NO";
     }
 
     function SetCashAdjustmentOptions(): void {

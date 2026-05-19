@@ -1,13 +1,33 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 
+import { runFlow } from "../../../packages/flow-sdk/src/index.js";
+import {
+  CashblocksRuntime,
+  QueuedCustomerInteraction,
+  RuntimeSimulator,
+  type PendingCustomerPrompt,
+  type RuntimeSimulatorOptions
+} from "../../../packages/runtime-core/src/index.js";
 import {
   getFlowManifest,
   readJournalHistory,
   runSimulation,
+  summarizeEvents,
   type SimulationRequest
 } from "./simulation.js";
+import flow from "../../../examples/atm-basic/src/flow.js";
+import manifest from "../../../examples/atm-basic/cashblocks.flow.json" with { type: "json" };
 
 const port = Number(process.env.PORT ?? 4173);
+const interactiveSessions = new Map<string, InteractiveSession>();
+
+type InteractiveSession = {
+  id: string;
+  runtime: CashblocksRuntime;
+  interaction: QueuedCustomerInteraction;
+  result?: Awaited<ReturnType<typeof runFlow>>;
+  resultPromise: Promise<Awaited<ReturnType<typeof runFlow>>>;
+};
 
 const server = createServer(async (request, response) => {
   try {
@@ -52,7 +72,116 @@ async function route(request: IncomingMessage, response: ServerResponse): Promis
     return;
   }
 
+  if (method === "POST" && url.pathname === "/api/session/start") {
+    const body = await readJson<SimulationRequest>(request);
+    const session = startInteractiveSession({
+      ...body,
+      journalPath: process.env.CASHBLOCKS_JOURNAL_PATH
+    });
+    writeJson(response, 200, await interactiveSessionState(session));
+    return;
+  }
+
+  if (method === "POST" && url.pathname === "/api/session/answer") {
+    const body = await readJson<{ sessionId: string; promptId: string; value: string }>(request);
+    const session = interactiveSessions.get(body.sessionId);
+    if (!session) {
+      writeJson(response, 404, { error: "Interactive session not found." });
+      return;
+    }
+    if (!session.interaction.answer(body.promptId, body.value)) {
+      writeJson(response, 409, { error: "Prompt is no longer pending." });
+      return;
+    }
+    writeJson(response, 200, await interactiveSessionState(session));
+    return;
+  }
+
   writeJson(response, 404, { error: "Not found" });
+}
+
+function startInteractiveSession(request: SimulationRequest): InteractiveSession {
+  const interaction = new QueuedCustomerInteraction();
+  const runtime = new CashblocksRuntime({
+    interaction,
+    simulator: new RuntimeSimulator(buildSimulatorOptions(request)),
+    journalPath: request.journalPath
+  });
+  const id = runtime.SessionId;
+  const session: InteractiveSession = {
+    id,
+    runtime,
+    interaction,
+    resultPromise: Promise.resolve(undefined as never)
+  };
+
+  session.resultPromise = runFlow(flow, {
+    runtime,
+    flowPackage: manifest
+  }).then(async (result) => {
+    await result.runtime.Journal.flush();
+    session.result = result;
+    return result;
+  });
+  session.resultPromise.catch(() => undefined);
+  interactiveSessions.set(id, session);
+  return session;
+}
+
+function buildSimulatorOptions(request: SimulationRequest): RuntimeSimulatorOptions {
+  return {
+    customerSelections: [request.transaction ?? "BalanceInquiry"],
+    optionSelections: [request.receiptWarningAnswer ?? "YES"],
+    receiptPrinter: request.receiptPrinterOut
+      ? { health: "DEGRADED", paper: "OUT" }
+      : { health: "HEALTHY", paper: "OK" },
+    hostApproved: !request.hostDeclined,
+    dispenserOnline: !request.dispenserOffline,
+    acceptorOnline: !request.acceptorOffline,
+    cardReaderOnline: !request.cardReaderOffline
+  };
+}
+
+async function interactiveSessionState(session: InteractiveSession): Promise<Record<string, unknown>> {
+  await waitForPromptOrResult(session);
+  const events = session.runtime.Journal.all();
+  const ok = session.result?.ok ?? !events.some((event) => event.type === "flow.failed");
+
+  return {
+    sessionId: session.id,
+    prompt: serializePrompt(session.interaction.current()),
+    completed: Boolean(session.result),
+    manifest,
+    summary: summarizeEvents(events, ok),
+    events
+  };
+}
+
+async function waitForPromptOrResult(session: InteractiveSession): Promise<void> {
+  if (session.interaction.current() || session.result) {
+    return;
+  }
+
+  await Promise.race([
+    new Promise<void>((resolve) => {
+      const unsubscribe = session.interaction.onPrompt(() => {
+        unsubscribe();
+        resolve();
+      });
+    }),
+    session.resultPromise.then(() => undefined)
+  ]);
+}
+
+function serializePrompt(prompt?: PendingCustomerPrompt): Record<string, unknown> | undefined {
+  if (!prompt) {
+    return undefined;
+  }
+
+  return {
+    id: prompt.id,
+    ...prompt.prompt
+  };
 }
 
 function writeHtml(response: ServerResponse, html: string): void {
@@ -580,6 +709,8 @@ function renderApp(): string {
         stage: "idle",
         pin: "",
         selectedTransaction: $("transaction").value,
+        sessionId: "",
+        prompt: null,
         result: null,
         running: false
       };
@@ -606,6 +737,8 @@ function renderApp(): string {
         demo.stage = "idle";
         demo.pin = "";
         demo.selectedTransaction = $("transaction").value;
+        demo.sessionId = "";
+        demo.prompt = null;
         demo.result = null;
         demo.running = false;
         $("run").textContent = "Reset terminal";
@@ -620,11 +753,12 @@ function renderApp(): string {
         renderInteractiveTerminal();
       }
 
-      async function completeTransaction() {
+      async function startInteractiveRun() {
         demo.running = true;
+        demo.stage = "processing";
         renderInteractiveTerminal();
         try {
-          const response = await fetch("/api/run", {
+          const response = await fetch("/api/session/start", {
             method: "POST",
             headers: { "content-type": "application/json" },
             body: JSON.stringify({
@@ -637,13 +771,63 @@ function renderApp(): string {
               receiptWarningAnswer: $("receiptWarningAnswer").value
             })
           });
-          demo.result = await response.json();
-          demo.stage = "result";
-          render(demo.result);
+          applyInteractiveState(await response.json());
         } finally {
           demo.running = false;
           renderInteractiveTerminal();
         }
+      }
+
+      async function answerPrompt(value) {
+        if (!demo.sessionId || !demo.prompt) return;
+        demo.running = true;
+        demo.stage = "processing";
+        renderInteractiveTerminal();
+        try {
+          const response = await fetch("/api/session/answer", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              sessionId: demo.sessionId,
+              promptId: demo.prompt.id,
+              value
+            })
+          });
+          applyInteractiveState(await response.json());
+        } finally {
+          demo.running = false;
+          renderInteractiveTerminal();
+        }
+      }
+
+      function applyInteractiveState(state) {
+        demo.sessionId = state.sessionId || demo.sessionId;
+        demo.prompt = state.prompt || null;
+        demo.result = state.completed ? state : null;
+
+        if (state.completed) {
+          demo.stage = "result";
+          render(state);
+          return;
+        }
+
+        if (state.prompt?.kind === "pin") {
+          demo.stage = "pin";
+          demo.pin = "";
+          return;
+        }
+
+        if (state.prompt?.kind === "transaction") {
+          demo.stage = "select";
+          return;
+        }
+
+        if (state.prompt?.kind === "option") {
+          demo.stage = "option";
+          return;
+        }
+
+        demo.stage = "processing";
       }
 
       async function loadManifest() {
@@ -763,6 +947,23 @@ function renderApp(): string {
           };
         }
 
+        if (demo.stage === "option" && demo.prompt) {
+          return {
+            status: "OPTION",
+            eyebrow: "Customer decision",
+            title: demo.prompt.screen === "PrinterDown" ? "Receipt unavailable" : demo.prompt.prompt,
+            message: "Choose one of the options requested by the running flow.",
+            operatorMessage: "The flow is paused at a customer option prompt.",
+            activeSlot: "receipt",
+            pinPad: false,
+            actions: (demo.prompt.options || []).map((option) => ({
+              label: option,
+              action: "answerOption:" + option
+            })),
+            steps: interactiveSteps("option")
+          };
+        }
+
         if (demo.stage === "processing") {
           return {
             status: "PROCESSING",
@@ -855,6 +1056,15 @@ function renderApp(): string {
           ];
         }
 
+        if (stage === "option") {
+          return [
+            done("Insert or tap card", "Card accepted by the terminal."),
+            done("Enter PIN", "PIN accepted by simulator."),
+            skipped("Select transaction", "Waiting for customer option."),
+            active("Customer option", "Flow is paused at " + (demo.prompt?.screen || "option") + ".")
+          ];
+        }
+
         return [
           done("Insert or tap card", "Card accepted by the terminal."),
           failed("Session cancelled", "Customer ended the session."),
@@ -892,9 +1102,7 @@ function renderApp(): string {
           return;
         }
         if (action === "insertCard") {
-          demo.stage = $("cardReaderOffline").checked ? "processing" : "pin";
-          if ($("cardReaderOffline").checked) completeTransaction();
-          else renderInteractiveTerminal();
+          startInteractiveRun();
           return;
         }
         if (action === "clearPin") {
@@ -906,21 +1114,24 @@ function renderApp(): string {
           const key = action.slice(4);
           if (key === "Enter") {
             if (demo.pin.length >= 4) {
-              demo.stage = "select";
-              renderInteractiveTerminal();
+              answerPrompt(demo.pin);
             }
             return;
           }
           if (demo.pin.length < 4) demo.pin += key;
           if (demo.pin.length === 4) {
-            demo.stage = "select";
+            answerPrompt(demo.pin);
+            return;
           }
           renderInteractiveTerminal();
           return;
         }
         if (action === "confirmTransaction") {
-          demo.stage = "processing";
-          completeTransaction();
+          answerPrompt(demo.selectedTransaction);
+          return;
+        }
+        if (action.startsWith("answerOption:")) {
+          answerPrompt(action.slice("answerOption:".length));
         }
       }
 

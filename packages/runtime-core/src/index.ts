@@ -6,6 +6,9 @@ import type {
   CashAcceptorAdapter,
   CashDispenserAdapter,
   CardReaderAdapter,
+  CustomerInteraction,
+  CustomerPrompt,
+  CustomerPromptAnswer,
   HostAuthorizationAdapter,
   HostAuthorizationRequest,
   JsonValue,
@@ -148,6 +151,7 @@ export class HandlerRegistry {
 export type RuntimeSimulatorOptions = {
   customerSelections?: string[];
   optionSelections?: string[];
+  pinEntries?: string[];
   receiptPrinter?: Partial<ReceiptPrinterStatus>;
   hostApproved?: boolean;
   dispenserOnline?: boolean;
@@ -158,6 +162,7 @@ export type RuntimeSimulatorOptions = {
 export class RuntimeSimulator {
   private customerSelections: string[];
   private optionSelections: string[];
+  private pinEntries: string[];
   receiptPrinter: ReceiptPrinterStatus;
   hostApproved: boolean;
   dispenserOnline: boolean;
@@ -167,6 +172,7 @@ export class RuntimeSimulator {
   constructor(options: RuntimeSimulatorOptions = {}) {
     this.customerSelections = [...(options.customerSelections ?? ["BalanceInquiry"])];
     this.optionSelections = [...(options.optionSelections ?? ["YES"])];
+    this.pinEntries = [...(options.pinEntries ?? ["1234"])];
     this.receiptPrinter = {
       health: options.receiptPrinter?.health ?? "HEALTHY",
       paper: options.receiptPrinter?.paper ?? "OK"
@@ -184,6 +190,81 @@ export class RuntimeSimulator {
   nextOption(_screen: string, options: string[]): string {
     const selected = this.optionSelections.shift();
     return selected && options.includes(selected) ? selected : options[0] ?? "";
+  }
+
+  nextPin(): string {
+    return this.pinEntries.shift() ?? "1234";
+  }
+}
+
+export class SimulatorCustomerInteraction implements CustomerInteraction {
+  constructor(private readonly simulator: RuntimeSimulator) {}
+
+  async request(prompt: CustomerPrompt): Promise<CustomerPromptAnswer> {
+    if (prompt.kind === "pin") {
+      return { value: this.simulator.nextPin() };
+    }
+
+    if (prompt.kind === "transaction") {
+      const selected = this.simulator.nextTransaction();
+      return {
+        value: prompt.options.includes(selected) ? selected : prompt.options[0] ?? ""
+      };
+    }
+
+    return { value: this.simulator.nextOption(prompt.screen, prompt.options) };
+  }
+}
+
+export class PendingCustomerPrompt {
+  readonly id: string;
+  private resolveAnswer?: (answer: CustomerPromptAnswer) => void;
+  readonly answer: Promise<CustomerPromptAnswer>;
+
+  constructor(readonly prompt: CustomerPrompt) {
+    this.id = `prompt-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    this.answer = new Promise((resolve) => {
+      this.resolveAnswer = resolve;
+    });
+  }
+
+  resolve(value: string): void {
+    this.resolveAnswer?.({ value });
+  }
+}
+
+export class QueuedCustomerInteraction implements CustomerInteraction {
+  private pendingPrompt?: PendingCustomerPrompt;
+  private readonly listeners = new Set<(prompt: PendingCustomerPrompt) => void>();
+
+  request(prompt: CustomerPrompt): Promise<CustomerPromptAnswer> {
+    const pending = new PendingCustomerPrompt(prompt);
+    this.pendingPrompt = pending;
+    for (const listener of this.listeners) {
+      listener(pending);
+    }
+    return pending.answer;
+  }
+
+  current(): PendingCustomerPrompt | undefined {
+    return this.pendingPrompt;
+  }
+
+  answer(promptId: string, value: string): boolean {
+    if (!this.pendingPrompt || this.pendingPrompt.id !== promptId) {
+      return false;
+    }
+    this.pendingPrompt.resolve(value);
+    this.pendingPrompt = undefined;
+    return true;
+  }
+
+  onPrompt(listener: (prompt: PendingCustomerPrompt) => void): () => void {
+    this.listeners.add(listener);
+    if (this.pendingPrompt) {
+      listener(this.pendingPrompt);
+    }
+    return () => this.listeners.delete(listener);
   }
 }
 
@@ -297,6 +378,7 @@ export function createSimulatedAdapters(simulator: RuntimeSimulator): TerminalAd
 export type CashblocksRuntimeOptions = {
   simulator?: RuntimeSimulator;
   adapters?: TerminalAdapters;
+  interaction?: CustomerInteraction;
   journalPath?: string;
   sessionId?: string;
 };
@@ -307,12 +389,14 @@ export class CashblocksRuntime {
   readonly Journal: RuntimeJournal;
   readonly Simulator: RuntimeSimulator;
   readonly Adapters: TerminalAdapters;
+  readonly Interaction: CustomerInteraction;
   readonly SessionId: string;
   readonly Cashblocks: RuntimeApi;
 
   constructor(options: CashblocksRuntimeOptions = {}) {
     this.Simulator = options.simulator ?? new RuntimeSimulator();
     this.Adapters = options.adapters ?? createSimulatedAdapters(this.Simulator);
+    this.Interaction = options.interaction ?? new SimulatorCustomerInteraction(this.Simulator);
     this.Journal = new RuntimeJournal({
       persistence: options.journalPath
         ? new JsonlJournalPersistence(options.journalPath)

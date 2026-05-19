@@ -80,10 +80,39 @@ export class CustomerModule extends AtmModule {
       sessionId: this.runtime.SessionId,
       payload: { prompt: "PIN" }
     });
+
+    const pin = await this.runtime.Interaction.request({
+      kind: "pin",
+      prompt: "Enter PIN"
+    });
+
+    this.runtime.Journal.append({
+      type: "ui.input_received",
+      source: "ui",
+      sessionId: this.runtime.SessionId,
+      payload: {
+        prompt: "PIN",
+        length: pin.value.length
+      }
+    });
   }
 
-  SelectTransaction(): string {
-    const transaction = this.runtime.Simulator.nextTransaction();
+  async SelectTransaction(): Promise<string> {
+    const answer = await this.runtime.Interaction.request({
+      kind: "transaction",
+      prompt: "Select transaction",
+      options: [
+        "BalanceInquiry",
+        "CashWithdrawal",
+        "CashDeposit",
+        "FastCash",
+        "CardlessWithdrawal",
+        "AdminBalanceTerminal",
+        "AdminCashAdjustment",
+        "AdminPrintTotals"
+      ]
+    });
+    const transaction = answer.value;
     this.TransactionSelected = transaction;
     this.runtime.Journal.append({
       type: "transaction.selected",
@@ -94,9 +123,15 @@ export class CustomerModule extends AtmModule {
     return transaction;
   }
 
-  SelectOption(screen: string, optionCsv: string): string {
+  async SelectOption(screen: string, optionCsv: string): Promise<string> {
     const options = optionCsv.split(",").map((option) => option.trim()).filter(Boolean);
-    const selected = this.runtime.Simulator.nextOption(screen, options);
+    const answer = await this.runtime.Interaction.request({
+      kind: "option",
+      screen,
+      prompt: screen,
+      options
+    });
+    const selected = options.includes(answer.value) ? answer.value : options[0] ?? "";
     this.runtime.Journal.append({
       type: "ui.prompt",
       source: "ui",

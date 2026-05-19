@@ -4,7 +4,13 @@ import { mkdtemp, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
-import { CashblocksRuntime, HandlerRegistry, JsonlJournalPersistence, MemoryScratchPad } from "./index.js";
+import {
+  CashblocksRuntime,
+  HandlerRegistry,
+  JsonlJournalPersistence,
+  MemoryScratchPad,
+  QueuedCustomerInteraction
+} from "./index.js";
 
 test("scratchpad stores, reads, and removes values", () => {
   const scratchPad = new MemoryScratchPad();
@@ -51,4 +57,19 @@ test("runtime can persist journal entries as jsonl", async () => {
 
   assert.equal(lines.length, 2);
   assert.equal(persisted.at(-1)?.payload?.message, "persist me");
+});
+
+test("queued customer interaction waits for an external answer", async () => {
+  const interaction = new QueuedCustomerInteraction();
+  const answerPromise = interaction.request({
+    kind: "transaction",
+    prompt: "Select transaction",
+    options: ["BalanceInquiry", "CashWithdrawal"]
+  });
+  const prompt = interaction.current();
+
+  assert.equal(prompt?.prompt.kind, "transaction");
+  assert.equal(prompt?.prompt.options.includes("CashWithdrawal"), true);
+  assert.equal(interaction.answer(prompt?.id ?? "", "CashWithdrawal"), true);
+  assert.deepEqual(await answerPromise, { value: "CashWithdrawal" });
 });
