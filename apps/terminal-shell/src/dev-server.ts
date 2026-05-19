@@ -335,6 +335,14 @@ function renderApp(): string {
         padding: 14px;
         background: rgba(255, 248, 236, 0.06);
         color: var(--ink);
+        margin: 0;
+        text-align: left;
+        font-weight: 800;
+      }
+
+      .atm-action:disabled {
+        cursor: default;
+        opacity: 0.46;
       }
 
       .atm-progress {
@@ -396,6 +404,34 @@ function renderApp(): string {
         font-size: 11px;
         text-transform: uppercase;
         letter-spacing: 0.1em;
+      }
+
+      .slot.active {
+        border-color: rgba(245, 184, 75, 0.7);
+        color: var(--ink);
+        box-shadow: 0 0 24px rgba(245, 184, 75, 0.2);
+      }
+
+      .pin-pad {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 8px;
+        margin-top: 18px;
+        max-width: 320px;
+      }
+
+      .pin-key {
+        margin: 0;
+        background: rgba(255, 248, 236, 0.08);
+        color: var(--ink);
+        border: 1px solid rgba(255, 248, 236, 0.14);
+      }
+
+      .status-copy {
+        color: var(--muted);
+        font-size: 12px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
       }
 
       .metric {
@@ -540,11 +576,23 @@ function renderApp(): string {
     <script>
       const $ = (id) => document.getElementById(id);
 
-      $("run").addEventListener("click", run);
+      const demo = {
+        stage: "idle",
+        pin: "",
+        selectedTransaction: $("transaction").value,
+        result: null,
+        running: false
+      };
+
+      $("run").addEventListener("click", resetDemo);
+      $("transaction").addEventListener("change", () => {
+        demo.selectedTransaction = $("transaction").value;
+        if (demo.stage === "select") renderInteractiveTerminal();
+      });
       $("runTab").addEventListener("click", () => showTab("run"));
       $("historyTab").addEventListener("click", () => showTab("history"));
       loadManifest();
-      run();
+      resetDemo();
 
       function showTab(tab) {
         $("runView").hidden = tab !== "run";
@@ -554,9 +602,27 @@ function renderApp(): string {
         if (tab === "history") loadHistory();
       }
 
-      async function run() {
-        $("run").disabled = true;
-        $("run").textContent = "Running...";
+      function resetDemo() {
+        demo.stage = "idle";
+        demo.pin = "";
+        demo.selectedTransaction = $("transaction").value;
+        demo.result = null;
+        demo.running = false;
+        $("run").textContent = "Reset terminal";
+        $("run").disabled = false;
+        renderShellSummary({
+          packageId: "cashblocks.example.atm-basic",
+          selectedTransaction: "none",
+          status: "waiting",
+          eventCount: "0"
+        });
+        $("timeline").innerHTML = "";
+        renderInteractiveTerminal();
+      }
+
+      async function completeTransaction() {
+        demo.running = true;
+        renderInteractiveTerminal();
         try {
           const response = await fetch("/api/run", {
             method: "POST",
@@ -571,10 +637,12 @@ function renderApp(): string {
               receiptWarningAnswer: $("receiptWarningAnswer").value
             })
           });
-          render(await response.json());
+          demo.result = await response.json();
+          demo.stage = "result";
+          render(demo.result);
         } finally {
-          $("run").disabled = false;
-          $("run").textContent = "Run flow";
+          demo.running = false;
+          renderInteractiveTerminal();
         }
       }
 
@@ -590,12 +658,12 @@ function renderApp(): string {
 
       function render(result) {
         const summary = result.summary;
-        $("summary").innerHTML = [
-          metric("Package", summary.packageId),
-          metric("Transaction", summary.selectedTransaction || "none"),
-          metric("Status", statusLabel(summary.status)),
-          metric("Events", String(summary.eventCount))
-        ].join("");
+        renderShellSummary({
+          packageId: summary.packageId,
+          selectedTransaction: summary.selectedTransaction || "none",
+          status: statusLabel(summary.status),
+          eventCount: String(summary.eventCount)
+        });
 
         $("terminalScreen").innerHTML =
           "<div class='terminal-bezel'>" +
@@ -624,6 +692,251 @@ function renderApp(): string {
             "<div class='payload'>" + escapeHtml(payload) + "</div></div>" +
             "</article>";
         }).join("");
+      }
+
+      function renderInteractiveTerminal() {
+        if (demo.stage === "result" && demo.result) return;
+
+        const screen = interactiveScreen();
+        $("terminalScreen").innerHTML =
+          "<div class='terminal-bezel'>" +
+            sideKeys() +
+            "<div class='atm-display'>" +
+              "<div class='atm-topbar'><span>Cashblocks ATM</span><span>" + escapeHtml(screen.status) + "</span></div>" +
+              "<div>" +
+                "<div class='status-copy'>" + escapeHtml(screen.eyebrow) + "</div>" +
+                "<h2>" + escapeHtml(screen.title) + "</h2>" +
+                "<p>" + escapeHtml(screen.message) + "</p>" +
+                renderInteractiveActions(screen.actions) +
+                renderPinPad(screen.pinPad) +
+                renderTerminalSteps(screen.steps) +
+              "</div>" +
+              "<div>" +
+                "<div class='hardware-strip'>" +
+                  "<div class='slot " + (screen.activeSlot === "card" ? "active" : "") + "'>Card</div>" +
+                  "<div class='slot " + (screen.activeSlot === "cash" ? "active" : "") + "'>Cash</div>" +
+                  "<div class='slot " + (screen.activeSlot === "receipt" ? "active" : "") + "'>Receipt</div>" +
+                "</div>" +
+                "<div class='operator-note'>" + escapeHtml(screen.operatorMessage) + "</div>" +
+              "</div>" +
+            "</div>" +
+            sideKeys() +
+          "</div>";
+
+        document.querySelectorAll("[data-terminal-action]").forEach((button) => {
+          button.addEventListener("click", () => handleTerminalAction(button.getAttribute("data-terminal-action") || ""));
+        });
+      }
+
+      function interactiveScreen() {
+        if (demo.stage === "pin") {
+          return {
+            status: "PIN",
+            eyebrow: "Secure customer input",
+            title: "Enter PIN",
+            message: "Use the simulated PIN pad. Any four digits are accepted by this demo runtime.",
+            operatorMessage: "Card credential accepted. Waiting for PIN entry.",
+            activeSlot: "card",
+            pinPad: true,
+            actions: [
+              { label: "Clear", action: "clearPin", disabled: demo.pin.length === 0 },
+              { label: "Cancel", action: "cancel" }
+            ],
+            steps: interactiveSteps("pin")
+          };
+        }
+
+        if (demo.stage === "select") {
+          return {
+            status: "SELECT",
+            eyebrow: "Main menu",
+            title: "Select transaction",
+            message: "Choose the transaction on the left panel, then confirm it on the terminal screen.",
+            operatorMessage: "The customer is now inside the transaction menu.",
+            activeSlot: selectedCashSlot(),
+            pinPad: false,
+            actions: [
+              { label: "Confirm " + formatTransaction(demo.selectedTransaction), action: "confirmTransaction" },
+              { label: "Cancel", action: "cancel" }
+            ],
+            steps: interactiveSteps("select")
+          };
+        }
+
+        if (demo.stage === "processing") {
+          return {
+            status: "PROCESSING",
+            eyebrow: "Runtime executing flow",
+            title: "Please wait",
+            message: "The selected flow is talking to simulated host and device adapters.",
+            operatorMessage: "Running the real flow package through /api/run.",
+            activeSlot: selectedCashSlot(),
+            pinPad: false,
+            actions: [
+              { label: "Processing...", action: "none", disabled: true },
+              { label: "Do not remove card", action: "none", disabled: true }
+            ],
+            steps: interactiveSteps("processing")
+          };
+        }
+
+        if (demo.stage === "cancelled") {
+          return {
+            status: "CANCELLED",
+            eyebrow: "Session ended",
+            title: "Transaction cancelled",
+            message: "The simulated customer cancelled before the flow package executed.",
+            operatorMessage: "Press Reset terminal to start again.",
+            activeSlot: "card",
+            pinPad: false,
+            actions: [
+              { label: "Start again", action: "reset" },
+              { label: "Return card", action: "reset" }
+            ],
+            steps: interactiveSteps("cancelled")
+          };
+        }
+
+        return {
+          status: "WELCOME",
+          eyebrow: "Idle screen",
+          title: "Insert or tap card",
+          message: "Start a customer session from the terminal screen, not from a pre-finished result.",
+          operatorMessage: "Fault toggles remain configurable on the left before the flow executes.",
+          activeSlot: "card",
+          pinPad: false,
+          actions: [
+            { label: "Insert card", action: "insertCard" },
+            { label: "Tap card", action: "insertCard" }
+          ],
+          steps: interactiveSteps("idle")
+        };
+      }
+
+      function interactiveSteps(stage) {
+        const done = (label, detail) => ({ label, detail, state: "done" });
+        const active = (label, detail) => ({ label, detail, state: "active" });
+        const skipped = (label, detail) => ({ label, detail, state: "skipped" });
+        const failed = (label, detail) => ({ label, detail, state: "failed" });
+
+        if (stage === "idle") {
+          return [
+            active("Insert or tap card", "Waiting for customer credential."),
+            skipped("Enter PIN", "PIN entry not reached."),
+            skipped("Select transaction", "Menu not displayed yet."),
+            skipped("Authorize and operate devices", "Runtime has not executed.")
+          ];
+        }
+
+        if (stage === "pin") {
+          return [
+            done("Insert or tap card", "Card accepted by the terminal."),
+            active("Enter PIN", demo.pin.length + "/4 digits entered."),
+            skipped("Select transaction", "Waiting for PIN completion."),
+            skipped("Authorize and operate devices", "Runtime has not executed.")
+          ];
+        }
+
+        if (stage === "select") {
+          return [
+            done("Insert or tap card", "Card accepted by the terminal."),
+            done("Enter PIN", "PIN accepted by simulator."),
+            active("Select transaction", formatTransaction(demo.selectedTransaction) + " highlighted."),
+            skipped("Authorize and operate devices", "Waiting for confirmation.")
+          ];
+        }
+
+        if (stage === "processing") {
+          return [
+            done("Insert or tap card", "Card accepted by the terminal."),
+            done("Enter PIN", "PIN accepted by simulator."),
+            done("Select transaction", formatTransaction(demo.selectedTransaction) + " selected."),
+            active("Authorize and operate devices", "Flow package is running.")
+          ];
+        }
+
+        return [
+          done("Insert or tap card", "Card accepted by the terminal."),
+          failed("Session cancelled", "Customer ended the session."),
+          skipped("Select transaction", "No transaction confirmed."),
+          skipped("Authorize and operate devices", "Runtime was not executed.")
+        ];
+      }
+
+      function renderInteractiveActions(actions) {
+        return "<div class='atm-actions'>" + actions.map((action) =>
+          "<button class='atm-action' data-terminal-action='" + escapeHtml(action.action) + "'" +
+            (action.disabled ? " disabled" : "") + ">" + escapeHtml(action.label) + "</button>"
+        ).join("") + "</div>";
+      }
+
+      function renderPinPad(show) {
+        if (!show) return "";
+        const keys = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "Enter"];
+        return "<div class='pin-pad'>" + keys.map((key) =>
+          "<button class='pin-key' data-terminal-action='pin:" + key + "'>" +
+            (key === "Enter" ? "Enter " + "*".repeat(demo.pin.length) : key) +
+          "</button>"
+        ).join("") + "</div>";
+      }
+
+      function handleTerminalAction(action) {
+        if (action === "none") return;
+        if (action === "reset") {
+          resetDemo();
+          return;
+        }
+        if (action === "cancel") {
+          demo.stage = "cancelled";
+          renderInteractiveTerminal();
+          return;
+        }
+        if (action === "insertCard") {
+          demo.stage = $("cardReaderOffline").checked ? "processing" : "pin";
+          if ($("cardReaderOffline").checked) completeTransaction();
+          else renderInteractiveTerminal();
+          return;
+        }
+        if (action === "clearPin") {
+          demo.pin = "";
+          renderInteractiveTerminal();
+          return;
+        }
+        if (action.startsWith("pin:")) {
+          const key = action.slice(4);
+          if (key === "Enter") {
+            if (demo.pin.length >= 4) {
+              demo.stage = "select";
+              renderInteractiveTerminal();
+            }
+            return;
+          }
+          if (demo.pin.length < 4) demo.pin += key;
+          if (demo.pin.length === 4) {
+            demo.stage = "select";
+          }
+          renderInteractiveTerminal();
+          return;
+        }
+        if (action === "confirmTransaction") {
+          demo.stage = "processing";
+          completeTransaction();
+        }
+      }
+
+      function selectedCashSlot() {
+        if (demo.selectedTransaction === "CashWithdrawal" || demo.selectedTransaction === "FastCash") return "cash";
+        if (demo.selectedTransaction === "CashDeposit") return "cash";
+        return "receipt";
+      }
+
+      function renderShellSummary(summary) {
+        $("summary").innerHTML = [
+          metric("Package", summary.packageId),
+          metric("Transaction", summary.selectedTransaction),
+          metric("Status", summary.status),
+          metric("Events", summary.eventCount)
+        ].join("");
       }
 
       function renderManifest(manifest) {
@@ -709,6 +1022,10 @@ function renderApp(): string {
         if (status === "failed") return "<span class='bad'>failed</span>";
         if (status === "completed") return "<span class='good'>completed</span>";
         return escapeHtml(status);
+      }
+
+      function formatTransaction(transaction) {
+        return String(transaction || "Transaction").replace(/([a-z])([A-Z])/g, "$1 $2");
       }
 
       function escapeHtml(value) {
