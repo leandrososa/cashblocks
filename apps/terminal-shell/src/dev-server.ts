@@ -253,16 +253,54 @@ function renderApp(): string {
 
       .terminal-screen {
         margin: 22px;
-        padding: 28px;
-        min-height: 220px;
+        padding: 22px;
+        min-height: 520px;
         border: 1px solid rgba(245, 184, 75, 0.38);
-        border-radius: 22px;
+        border-radius: 34px;
         background:
           radial-gradient(circle at 85% 20%, rgba(245, 184, 75, 0.14), transparent 18rem),
-          linear-gradient(160deg, #091017 0%, #0f2029 100%);
+          linear-gradient(160deg, #070c12 0%, #0f2029 100%);
+        box-shadow: inset 0 0 0 10px rgba(255, 248, 236, 0.04);
       }
 
-      .terminal-screen .eyebrow {
+      .terminal-bezel {
+        display: grid;
+        grid-template-columns: 44px 1fr 44px;
+        gap: 18px;
+        height: 100%;
+      }
+
+      .side-keys {
+        display: grid;
+        align-content: center;
+        gap: 24px;
+      }
+
+      .side-key {
+        width: 44px;
+        height: 34px;
+        border: 1px solid rgba(255, 248, 236, 0.22);
+        border-radius: 10px;
+        background: linear-gradient(180deg, #2b3740, #111a21);
+        box-shadow: 0 6px 0 rgba(0, 0, 0, 0.22);
+      }
+
+      .atm-display {
+        min-height: 470px;
+        display: grid;
+        grid-template-rows: auto 1fr auto;
+        padding: 28px;
+        border-radius: 24px;
+        background:
+          linear-gradient(180deg, rgba(28, 74, 92, 0.48), rgba(6, 15, 21, 0.84)),
+          repeating-linear-gradient(0deg, rgba(255,255,255,0.025), rgba(255,255,255,0.025) 1px, transparent 1px, transparent 5px);
+        border: 1px solid rgba(255, 248, 236, 0.14);
+      }
+
+      .atm-topbar {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
         color: var(--accent);
         text-transform: uppercase;
         letter-spacing: 0.14em;
@@ -270,16 +308,66 @@ function renderApp(): string {
         margin-bottom: 18px;
       }
 
-      .terminal-screen h2 {
+      .atm-display h2 {
         margin: 0;
-        font-size: clamp(30px, 4vw, 54px);
+        font-size: clamp(34px, 5vw, 70px);
         letter-spacing: -0.06em;
+        line-height: 0.95;
       }
 
-      .terminal-screen p {
+      .atm-display p {
         max-width: 720px;
         color: var(--muted);
         line-height: 1.55;
+        font-size: 18px;
+      }
+
+      .atm-actions {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+        margin-top: 24px;
+      }
+
+      .atm-action {
+        border: 1px solid rgba(255, 248, 236, 0.18);
+        border-radius: 14px;
+        padding: 14px;
+        background: rgba(255, 248, 236, 0.06);
+        color: var(--ink);
+      }
+
+      .atm-progress {
+        display: grid;
+        gap: 8px;
+        margin-top: 24px;
+      }
+
+      .atm-step {
+        display: grid;
+        grid-template-columns: 18px 1fr;
+        gap: 10px;
+        align-items: start;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .dot {
+        width: 12px;
+        height: 12px;
+        margin-top: 3px;
+        border-radius: 999px;
+        background: var(--muted);
+      }
+
+      .atm-step.done .dot { background: var(--good); }
+      .atm-step.failed .dot { background: var(--bad); }
+      .atm-step.active .dot { background: var(--accent); box-shadow: 0 0 22px rgba(245, 184, 75, 0.7); }
+      .atm-step.skipped { opacity: 0.58; }
+
+      .atm-step strong {
+        display: block;
+        color: var(--ink);
       }
 
       .operator-note {
@@ -288,6 +376,26 @@ function renderApp(): string {
         border-top: 1px solid var(--line);
         color: var(--muted);
         font-size: 13px;
+      }
+
+      .hardware-strip {
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr;
+        gap: 10px;
+        margin-top: 18px;
+      }
+
+      .slot {
+        height: 38px;
+        border: 1px solid rgba(255, 248, 236, 0.16);
+        border-radius: 999px;
+        background: #090f14;
+        color: var(--muted);
+        display: grid;
+        place-items: center;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
       }
 
       .metric {
@@ -490,10 +598,23 @@ function renderApp(): string {
         ].join("");
 
         $("terminalScreen").innerHTML =
-          "<div class='eyebrow'>Terminal screen</div>" +
-          "<h2>" + escapeHtml(summary.screenTitle) + "</h2>" +
-          "<p>" + escapeHtml(summary.screenMessage) + "</p>" +
-          "<div class='operator-note'>" + escapeHtml(summary.operatorMessage) + "</div>";
+          "<div class='terminal-bezel'>" +
+            sideKeys() +
+            "<div class='atm-display'>" +
+              "<div class='atm-topbar'><span>Cashblocks ATM</span><span>" + escapeHtml(summary.status) + "</span></div>" +
+              "<div>" +
+                "<h2>" + escapeHtml(summary.screenTitle) + "</h2>" +
+                "<p>" + escapeHtml(summary.screenMessage) + "</p>" +
+                renderAtmActions(summary) +
+                renderTerminalSteps(summary.terminalSteps || []) +
+              "</div>" +
+              "<div>" +
+                "<div class='hardware-strip'><div class='slot'>Card</div><div class='slot'>Cash</div><div class='slot'>Receipt</div></div>" +
+                "<div class='operator-note'>" + escapeHtml(summary.operatorMessage) + "</div>" +
+              "</div>" +
+            "</div>" +
+            sideKeys() +
+          "</div>";
 
         $("timeline").innerHTML = result.events.map((event) => {
           const payload = event.payload ? JSON.stringify(event.payload, null, 2) : "";
@@ -515,6 +636,35 @@ function renderApp(): string {
           "<div class='chips'>" + (manifest.modules || []).map((moduleName) =>
             "<span class='chip'>" + escapeHtml(moduleName) + "</span>"
           ).join("") + "</div>";
+      }
+
+      function sideKeys() {
+        return "<div class='side-keys'><div class='side-key'></div><div class='side-key'></div><div class='side-key'></div><div class='side-key'></div></div>";
+      }
+
+      function renderAtmActions(summary) {
+        if (summary.status === "idle") {
+          return "<div class='atm-actions'><div class='atm-action'>Insert card</div><div class='atm-action'>Tap card</div></div>";
+        }
+
+        if (summary.status === "cancelled") {
+          return "<div class='atm-actions'><div class='atm-action'>Return card</div><div class='atm-action'>End session</div></div>";
+        }
+
+        if (summary.status === "failed") {
+          return "<div class='atm-actions'><div class='atm-action'>Try another transaction</div><div class='atm-action'>Call operator</div></div>";
+        }
+
+        return "<div class='atm-actions'><div class='atm-action'>Print receipt</div><div class='atm-action'>Finish</div></div>";
+      }
+
+      function renderTerminalSteps(steps) {
+        return "<div class='atm-progress'>" + steps.map((step) =>
+          "<div class='atm-step " + escapeHtml(step.state) + "'>" +
+            "<span class='dot'></span>" +
+            "<span><strong>" + escapeHtml(step.label) + "</strong>" + escapeHtml(step.detail) + "</span>" +
+          "</div>"
+        ).join("") + "</div>";
       }
 
       function renderHistory(history) {

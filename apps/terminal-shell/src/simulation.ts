@@ -23,11 +23,18 @@ export type SimulationSummary = {
   screenTitle: string;
   screenMessage: string;
   operatorMessage: string;
+  terminalSteps: TerminalStep[];
   completed: boolean;
   failed: boolean;
   failureCode?: string;
   warningOffered: boolean;
   eventCount: number;
+};
+
+export type TerminalStep = {
+  label: string;
+  state: "done" | "active" | "failed" | "skipped";
+  detail: string;
 };
 
 export type SimulationResult = {
@@ -113,7 +120,8 @@ export function summarizeEvents(events: RuntimeEvent[], flowOk = true): Simulati
     status,
     selectedTransaction,
     failureCode,
-    warningOffered: Boolean(warning)
+    warningOffered: Boolean(warning),
+    events
   });
 
   return {
@@ -124,6 +132,7 @@ export function summarizeEvents(events: RuntimeEvent[], flowOk = true): Simulati
     screenTitle: terminalScreen.title,
     screenMessage: terminalScreen.message,
     operatorMessage: terminalScreen.operatorMessage,
+    terminalSteps: terminalScreen.steps,
     completed: completedState,
     failed: failedState,
     failureCode,
@@ -137,12 +146,16 @@ function createTerminalScreen(input: {
   selectedTransaction?: string;
   failureCode?: string;
   warningOffered: boolean;
-}): { title: string; message: string; operatorMessage: string } {
+  events: RuntimeEvent[];
+}): { title: string; message: string; operatorMessage: string; steps: TerminalStep[] } {
+  const steps = createTerminalSteps(input);
+
   if (input.status === "completed") {
     return {
       title: `${formatTransaction(input.selectedTransaction)} complete`,
       message: "Thank you. Your transaction has finished successfully.",
-      operatorMessage: "Flow completed without simulated device or host faults."
+      operatorMessage: "Flow completed without simulated device or host faults.",
+      steps
     };
   }
 
@@ -152,27 +165,136 @@ function createTerminalScreen(input: {
       message: input.warningOffered
         ? "Receipt printing is unavailable. The customer chose not to continue."
         : "The customer cancelled before a transaction was selected.",
-      operatorMessage: "No transaction was selected after the warning path."
+      operatorMessage: "No transaction was selected after the warning path.",
+      steps
     };
   }
 
   if (input.status === "failed") {
-    return failureScreen(input.failureCode);
+    return failureScreen(input.failureCode, steps);
   }
 
   return {
     title: "Waiting for customer",
     message: "Select a transaction to begin.",
-    operatorMessage: "Runtime is idle."
+    operatorMessage: "Runtime is idle.",
+    steps
   };
 }
 
-function failureScreen(code?: string): { title: string; message: string; operatorMessage: string } {
+function createTerminalSteps(input: {
+  status: SimulationSummary["status"];
+  selectedTransaction?: string;
+  failureCode?: string;
+  warningOffered: boolean;
+  events: RuntimeEvent[];
+}): TerminalStep[] {
+  const hasPinPrompt = input.events.some(
+    (event) => event.type === "ui.prompt" && event.payload?.prompt === "PIN"
+  );
+  const hasHostRequest = input.events.some((event) => event.type === "host.authorization_requested");
+  const hasHostResult = input.events.some((event) => event.type === "host.authorization_result");
+  const hasTransaction = Boolean(input.selectedTransaction);
+
+  return [
+    {
+      label: "Insert or tap card",
+      state: input.failureCode === "CARD_READER_OFFLINE" ? "failed" : hasPinPrompt ? "done" : "active",
+      detail:
+        input.failureCode === "CARD_READER_OFFLINE"
+          ? "Card reader unavailable."
+          : hasPinPrompt
+            ? "Card accepted by the terminal."
+            : "Waiting for customer credential."
+    },
+    {
+      label: "Enter PIN",
+      state: hasPinPrompt ? "done" : input.failureCode === "CARD_READER_OFFLINE" ? "skipped" : "active",
+      detail: hasPinPrompt ? "PIN prompt displayed." : "PIN entry not reached."
+    },
+    {
+      label: "Select transaction",
+      state: hasTransaction ? "done" : input.status === "cancelled" ? "skipped" : "active",
+      detail: hasTransaction
+        ? `${formatTransaction(input.selectedTransaction)} selected.`
+        : input.status === "cancelled"
+          ? "Customer stopped before transaction selection."
+          : "Waiting for selection."
+    },
+    {
+      label: "Receipt availability",
+      state: input.warningOffered
+        ? input.status === "cancelled"
+          ? "failed"
+          : "done"
+        : "done",
+      detail: input.warningOffered
+        ? input.status === "cancelled"
+          ? "Printer unavailable; customer declined to continue."
+          : "Printer unavailable; customer accepted warning."
+        : "Receipt path healthy or warning not required."
+    },
+    {
+      label: "Authorize and operate devices",
+      state: input.status === "failed"
+        ? "failed"
+        : hasHostRequest || hasHostResult
+          ? "done"
+          : hasTransaction
+            ? "done"
+            : "skipped",
+      detail: operationDetail(input)
+    },
+    {
+      label: "Finish session",
+      state: input.status === "completed"
+        ? "done"
+        : input.status === "failed"
+          ? "failed"
+          : input.status === "cancelled"
+            ? "skipped"
+            : "active",
+      detail:
+        input.status === "completed"
+          ? "Terminal can return to idle."
+          : input.status === "failed"
+            ? "Operator attention may be required."
+            : input.status === "cancelled"
+              ? "Session ended without a transaction."
+              : "Session still in progress."
+    }
+  ];
+}
+
+function operationDetail(input: {
+  status: SimulationSummary["status"];
+  selectedTransaction?: string;
+  failureCode?: string;
+}): string {
+  if (input.failureCode === "HOST_DECLINED") return "Host declined authorization.";
+  if (input.failureCode === "DISPENSER_OFFLINE") return "Cash dispenser could not operate.";
+  if (input.failureCode === "ACCEPTOR_OFFLINE") return "Cash acceptor could not operate.";
+  if (input.failureCode === "CARD_READER_OFFLINE") return "Operation skipped after card reader failure.";
+
+  if (input.selectedTransaction === "BalanceInquiry") return "Balance lookup completed in simulator.";
+  if (input.selectedTransaction === "CashWithdrawal") return "Authorization approved and cash dispensed.";
+  if (input.selectedTransaction === "CashDeposit") return "Cash accepted by simulator.";
+  if (input.selectedTransaction === "FastCash") return "Fast cash authorization and dispense completed.";
+  if (input.selectedTransaction?.startsWith("Admin")) return "Administrative operation completed.";
+
+  return input.status === "cancelled" ? "No device operation performed." : "No device action required.";
+}
+
+function failureScreen(
+  code: string | undefined,
+  steps: TerminalStep[]
+): { title: string; message: string; operatorMessage: string; steps: TerminalStep[] } {
   if (code === "HOST_DECLINED") {
     return {
       title: "Transaction declined",
       message: "The authorization host declined this transaction.",
-      operatorMessage: "Host authorization returned HOST_DECLINED."
+      operatorMessage: "Host authorization returned HOST_DECLINED.",
+      steps
     };
   }
 
@@ -180,7 +302,8 @@ function failureScreen(code?: string): { title: string; message: string; operato
     return {
       title: "Cash unavailable",
       message: "This terminal cannot dispense cash right now.",
-      operatorMessage: "Cash dispenser adapter reported DISPENSER_OFFLINE."
+      operatorMessage: "Cash dispenser adapter reported DISPENSER_OFFLINE.",
+      steps
     };
   }
 
@@ -188,7 +311,8 @@ function failureScreen(code?: string): { title: string; message: string; operato
     return {
       title: "Deposit unavailable",
       message: "This terminal cannot accept cash right now.",
-      operatorMessage: "Cash acceptor adapter reported ACCEPTOR_OFFLINE."
+      operatorMessage: "Cash acceptor adapter reported ACCEPTOR_OFFLINE.",
+      steps
     };
   }
 
@@ -196,14 +320,16 @@ function failureScreen(code?: string): { title: string; message: string; operato
     return {
       title: "Card reader unavailable",
       message: "This terminal cannot read cards right now.",
-      operatorMessage: "Card reader adapter reported CARD_READER_OFFLINE."
+      operatorMessage: "Card reader adapter reported CARD_READER_OFFLINE.",
+      steps
     };
   }
 
   return {
     title: "Transaction failed",
     message: "The transaction could not be completed.",
-    operatorMessage: code ? `Failure code: ${code}.` : "Runtime reported an unknown failure."
+    operatorMessage: code ? `Failure code: ${code}.` : "Runtime reported an unknown failure.",
+    steps
   };
 }
 

@@ -16,6 +16,18 @@ test("runs a successful cash withdrawal simulation", async () => {
   assert.equal(result.summary.selectedTransaction, "CashWithdrawal");
   assert.equal(result.summary.status, "completed");
   assert.equal(result.summary.screenTitle, "Cash Withdrawal complete");
+  assert.deepEqual(
+    result.summary.terminalSteps.map((step) => step.label),
+    [
+      "Insert or tap card",
+      "Enter PIN",
+      "Select transaction",
+      "Receipt availability",
+      "Authorize and operate devices",
+      "Finish session"
+    ]
+  );
+  assert.equal(result.summary.terminalSteps.at(-1)?.state, "done");
   assert.equal(result.summary.completed, true);
   assert.equal(result.summary.failed, false);
 });
@@ -41,6 +53,8 @@ test("surfaces card reader failures before transaction selection", async () => {
   assert.equal(result.summary.failed, true);
   assert.equal(result.summary.failureCode, "CARD_READER_OFFLINE");
   assert.equal(result.summary.screenTitle, "Card reader unavailable");
+  assert.equal(result.summary.terminalSteps[0]?.state, "failed");
+  assert.equal(result.summary.terminalSteps[1]?.state, "skipped");
 });
 
 test("surfaces dispenser failures for cash withdrawal", async () => {
