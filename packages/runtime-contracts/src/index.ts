@@ -39,6 +39,26 @@ export type RuntimeEventDraft = Omit<RuntimeEvent, "seq" | "ts"> & {
   ts?: string;
 };
 
+export type DiagnosticLogLevel = "debug" | "info" | "warn" | "error";
+
+export type DiagnosticLogEntry = {
+  level: DiagnosticLogLevel;
+  ts: string;
+  source: "runtime" | "flow" | "module" | "adapter" | "simulator" | "ui";
+  message: string;
+  sessionId?: string;
+  error?: {
+    name: string;
+    message: string;
+    stack?: string;
+  };
+  metadata?: Record<string, JsonValue>;
+};
+
+export type DiagnosticLogger = {
+  log(entry: DiagnosticLogEntry): void;
+};
+
 export type AuthorizationConfig = {
   PinlessAuthorizationEnabled: boolean;
   ChipAuthorizationRequired: boolean;

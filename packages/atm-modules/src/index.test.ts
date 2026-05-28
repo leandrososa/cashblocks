@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { CashblocksRuntime } from "../../runtime-core/src/index.js";
+import { CashblocksRuntime, MemoryDiagnosticLogger } from "../../runtime-core/src/index.js";
 import { createAtmModules } from "./index.js";
 
 test("balance inquiry handler can force balance display", async () => {
@@ -47,6 +47,29 @@ test("cash withdrawal fails when host adapter declines", async () => {
     runtime.Journal.all().some((event) => event.type === "transaction.failed"),
     true
   );
+});
+
+test("cash withdrawal logs diagnostic entries when an adapter throws", async () => {
+  const logger = new MemoryDiagnosticLogger();
+  const runtime = new CashblocksRuntime({ logger });
+  const modules = createAtmModules(runtime);
+
+  runtime.Adapters.cashDispenser = {
+    id: "throwing-dispenser",
+    async dispense() {
+      throw new Error("vendor service crashed");
+    }
+  };
+
+  await assert.rejects(
+    () => modules.CashWithdrawal.Execute(),
+    /vendor service crashed/
+  );
+
+  const entry = logger.all().find((log) => log.source === "adapter");
+  assert.equal(entry?.level, "error");
+  assert.equal(entry?.metadata?.adapter, "cashDispenser");
+  assert.equal(entry?.error?.message, "vendor service crashed");
 });
 
 test("customer pin entry fails when card reader is offline", async () => {

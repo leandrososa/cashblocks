@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { MemoryDiagnosticLogger } from "../../runtime-core/src/index.js";
 import { defineFlow, runFlow, validateFlowManifest } from "./index.js";
 
 test("defineFlow receives fresh globals for each run", async () => {
@@ -22,18 +23,21 @@ test("defineFlow receives fresh globals for each run", async () => {
 });
 
 test("runFlow journals lifecycle failures instead of throwing", async () => {
+  const logger = new MemoryDiagnosticLogger();
   const flow = defineFlow(() => ({
     OnIdle() {
       throw new Error("screen renderer exploded");
     }
   }));
 
-  const result = await runFlow(flow);
+  const result = await runFlow(flow, { runtimeOptions: { logger } });
   const failure = result.runtime.Journal.all().find((event) => event.type === "flow.failed");
 
   assert.equal(result.ok, false);
   assert.equal(result.error?.phase, "OnIdle");
   assert.equal(failure?.payload?.message, "screen renderer exploded");
+  assert.equal(logger.all()[0]?.source, "flow");
+  assert.equal(logger.all()[0]?.error?.message, "screen renderer exploded");
 });
 
 test("runFlow journals factory failures instead of throwing", async () => {

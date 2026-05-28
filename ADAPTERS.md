@@ -20,6 +20,10 @@ The first supported adapter set is:
 hardware or host integrations should implement the same interfaces and pass them
 to `new CashblocksRuntime({ adapters })`.
 
+Expected device or host outcomes should return an `AdapterResult`. Unexpected
+software exceptions should be emitted through diagnostic logs with adapter,
+operation, session, and error metadata.
+
 ## Journal Persistence
 
 `RuntimeJournal` always keeps an in-memory event list for the active process.
@@ -37,6 +41,23 @@ monotonic `seq` assigned by the runtime.
 
 Call `await runtime.Journal.flush()` before process exit when a CLI or service
 needs to guarantee all pending appends are on disk.
+
+## Diagnostic Logs
+
+Diagnostic logging is separate from journal persistence. The journal records
+runtime-visible truth for audit and replay. Diagnostic logs record technical
+software failures such as thrown adapter errors, flow lifecycle failures, and
+stack traces.
+
+Pass a logger when constructing the runtime:
+
+```ts
+const runtime = new CashblocksRuntime({
+  logger: new ConsoleDiagnosticLogger()
+});
+```
+
+If no logger is supplied, the runtime uses a no-op logger.
 
 ## Current Scope
 

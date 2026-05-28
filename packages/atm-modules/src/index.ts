@@ -1,4 +1,9 @@
-import type { AuthorizationConfig, CustomerType, TransactionResult } from "../../runtime-contracts/src/index.js";
+import type {
+  AuthorizationConfig,
+  CustomerType,
+  JsonValue,
+  TransactionResult
+} from "../../runtime-contracts/src/index.js";
 import { CashblocksRuntime, HandlerRegistry } from "../../runtime-core/src/index.js";
 
 export abstract class AtmModule {
@@ -58,7 +63,12 @@ export class CustomerModule extends AtmModule {
   }
 
   async PinEntry(): Promise<void> {
-    const cardRead = await this.runtime.Adapters.cardReader.readCard();
+    const cardRead = await callAdapter(
+      this.runtime,
+      "cardReader",
+      "readCard",
+      () => this.runtime.Adapters.cardReader.readCard()
+    );
 
     if (!cardRead.ok) {
       this.runtime.Journal.append({
@@ -226,14 +236,21 @@ export class CashWithdrawalModule extends AtmModule {
     });
 
     const currencyCode = this.runtime.Cashblocks.GetProperty<string>("Currency.Code") ?? "AUD";
-    const authorization = await this.runtime.Adapters.hostAuthorization.authorize({
-      transaction: this.Name,
-      host: this.Authorization.TransactionHost,
-      amount: this.Amount,
-      currencyCode,
-      pinless: this.Authorization.PinlessAuthorizationEnabled,
-      chipRequired: this.Authorization.ChipAuthorizationRequired
-    });
+    const authorization = await callAdapter(
+      this.runtime,
+      "hostAuthorization",
+      "authorize",
+      () =>
+        this.runtime.Adapters.hostAuthorization.authorize({
+          transaction: this.Name,
+          host: this.Authorization.TransactionHost,
+          amount: this.Amount,
+          currencyCode,
+          pinless: this.Authorization.PinlessAuthorizationEnabled,
+          chipRequired: this.Authorization.ChipAuthorizationRequired
+        }),
+      { transaction: this.Name }
+    );
 
     this.runtime.Journal.append({
       type: "host.authorization_result",
@@ -257,10 +274,17 @@ export class CashWithdrawalModule extends AtmModule {
       return this.runtime.result(false, authorization.code, authorization.message);
     }
 
-    const dispense = await this.runtime.Adapters.cashDispenser.dispense({
-      amount: this.Amount,
-      currencyCode
-    });
+    const dispense = await callAdapter(
+      this.runtime,
+      "cashDispenser",
+      "dispense",
+      () =>
+        this.runtime.Adapters.cashDispenser.dispense({
+          amount: this.Amount,
+          currencyCode
+        }),
+      { transaction: this.Name, amount: this.Amount, currencyCode }
+    );
 
     if (!dispense.ok) {
       this.runtime.Journal.append({
@@ -304,10 +328,17 @@ export class CashDepositModule extends AtmModule {
 
   async Execute(): Promise<TransactionResult> {
     const currencyCode = this.runtime.Cashblocks.GetProperty<string>("Currency.Code") ?? "AUD";
-    const accepted = await this.runtime.Adapters.cashAcceptor.accept({
-      expectedAmount: this.ExpectedAmount || undefined,
-      currencyCode
-    });
+    const accepted = await callAdapter(
+      this.runtime,
+      "cashAcceptor",
+      "accept",
+      () =>
+        this.runtime.Adapters.cashAcceptor.accept({
+          expectedAmount: this.ExpectedAmount || undefined,
+          currencyCode
+        }),
+      { transaction: this.Name, expectedAmount: this.ExpectedAmount || null, currencyCode }
+    );
 
     if (!accepted.ok) {
       this.runtime.Journal.append({
@@ -382,5 +413,45 @@ export function createAtmModules(runtime: CashblocksRuntime): AtmModules {
     CashDeposit: new CashDepositModule(runtime),
     FastCash: new FastCashModule(runtime),
     TerminalAdmin: new AdminModule(runtime)
+  };
+}
+
+async function callAdapter<T>(
+  runtime: CashblocksRuntime,
+  adapter: string,
+  operation: string,
+  call: () => Promise<T>,
+  metadata: Record<string, JsonValue> = {}
+): Promise<T> {
+  try {
+    return await call();
+  } catch (error) {
+    runtime.logDiagnostic({
+      level: "error",
+      source: "adapter",
+      message: `Adapter ${adapter}.${operation} threw an exception.`,
+      error: diagnosticError(error),
+      metadata: {
+        adapter,
+        operation,
+        ...metadata
+      }
+    });
+    throw error;
+  }
+}
+
+function diagnosticError(error: unknown): { name: string; message: string; stack?: string } {
+  if (error instanceof Error) {
+    return {
+      name: error.name,
+      message: error.message,
+      stack: error.stack
+    };
+  }
+
+  return {
+    name: "Error",
+    message: String(error)
   };
 }

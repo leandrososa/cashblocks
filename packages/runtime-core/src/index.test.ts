@@ -9,6 +9,7 @@ import {
   HandlerRegistry,
   JsonlJournalPersistence,
   MemoryScratchPad,
+  MemoryDiagnosticLogger,
   QueuedCustomerInteraction
 } from "./index.js";
 
@@ -41,6 +42,34 @@ test("runtime creates journal entries for logs", () => {
   runtime.Cashblocks.Log("hello");
 
   assert.equal(runtime.Journal.all().at(-1)?.payload?.message, "hello");
+});
+
+test("runtime works without an explicit diagnostic logger", () => {
+  const runtime = new CashblocksRuntime({ sessionId: "default-logger" });
+
+  assert.doesNotThrow(() => {
+    runtime.logDiagnostic({
+      level: "info",
+      source: "runtime",
+      message: "runtime booted"
+    });
+  });
+});
+
+test("memory diagnostic logger stores technical log entries", () => {
+  const logger = new MemoryDiagnosticLogger();
+  const runtime = new CashblocksRuntime({ sessionId: "diag", logger });
+
+  runtime.logDiagnostic({
+    level: "warn",
+    source: "runtime",
+    message: "simulated warning",
+    metadata: { component: "test" }
+  });
+
+  assert.equal(logger.all().length, 1);
+  assert.equal(logger.all()[0]?.sessionId, "diag");
+  assert.equal(logger.all()[0]?.metadata?.component, "test");
 });
 
 test("runtime can persist journal entries as jsonl", async () => {

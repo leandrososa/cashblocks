@@ -6,6 +6,8 @@ import type {
   CashAcceptorAdapter,
   CashDispenserAdapter,
   CardReaderAdapter,
+  DiagnosticLogEntry,
+  DiagnosticLogger,
   CustomerInteraction,
   CustomerPrompt,
   CustomerPromptAnswer,
@@ -90,6 +92,50 @@ export class RuntimeJournal {
 
   async flush(): Promise<void> {
     await this.pendingPersistence;
+  }
+}
+
+export class NoopDiagnosticLogger implements DiagnosticLogger {
+  log(_entry: DiagnosticLogEntry): void {
+    // Intentionally empty.
+  }
+}
+
+export class ConsoleDiagnosticLogger implements DiagnosticLogger {
+  log(entry: DiagnosticLogEntry): void {
+    const output = {
+      ts: entry.ts,
+      source: entry.source,
+      sessionId: entry.sessionId,
+      message: entry.message,
+      metadata: entry.metadata,
+      error: entry.error
+    };
+    if (entry.level === "error") {
+      console.error(output);
+      return;
+    }
+    if (entry.level === "warn") {
+      console.warn(output);
+      return;
+    }
+    if (entry.level === "debug") {
+      console.debug(output);
+      return;
+    }
+    console.info(output);
+  }
+}
+
+export class MemoryDiagnosticLogger implements DiagnosticLogger {
+  private readonly entries: DiagnosticLogEntry[] = [];
+
+  log(entry: DiagnosticLogEntry): void {
+    this.entries.push(entry);
+  }
+
+  all(): DiagnosticLogEntry[] {
+    return [...this.entries];
   }
 }
 
@@ -379,6 +425,7 @@ export type CashblocksRuntimeOptions = {
   simulator?: RuntimeSimulator;
   adapters?: TerminalAdapters;
   interaction?: CustomerInteraction;
+  logger?: DiagnosticLogger;
   journalPath?: string;
   sessionId?: string;
 };
@@ -390,6 +437,7 @@ export class CashblocksRuntime {
   readonly Simulator: RuntimeSimulator;
   readonly Adapters: TerminalAdapters;
   readonly Interaction: CustomerInteraction;
+  readonly Logger: DiagnosticLogger;
   readonly SessionId: string;
   readonly Cashblocks: RuntimeApi;
 
@@ -397,6 +445,7 @@ export class CashblocksRuntime {
     this.Simulator = options.simulator ?? new RuntimeSimulator();
     this.Adapters = options.adapters ?? createSimulatedAdapters(this.Simulator);
     this.Interaction = options.interaction ?? new SimulatorCustomerInteraction(this.Simulator);
+    this.Logger = options.logger ?? new NoopDiagnosticLogger();
     this.Journal = new RuntimeJournal({
       persistence: options.journalPath
         ? new JsonlJournalPersistence(options.journalPath)
@@ -443,5 +492,17 @@ export class CashblocksRuntime {
 
   result(ok: boolean, code: string, message: string): TransactionResult {
     return { ok, code, message };
+  }
+
+  logDiagnostic(entry: Omit<DiagnosticLogEntry, "ts" | "sessionId"> & { sessionId?: string }): void {
+    try {
+      this.Logger.log({
+        ...entry,
+        ts: new Date().toISOString(),
+        sessionId: entry.sessionId ?? this.SessionId
+      });
+    } catch {
+      // Diagnostic logging must never change runtime behavior.
+    }
   }
 }

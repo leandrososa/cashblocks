@@ -133,6 +133,13 @@ function failFlow(input: {
       message
     }
   });
+  input.runtime.logDiagnostic({
+    level: "error",
+    source: "flow",
+    message: `Flow failed during ${input.phase}.`,
+    error: diagnosticError(input.error),
+    metadata: { phase: input.phase }
+  });
 
   return {
     ok: false,
@@ -142,5 +149,20 @@ function failFlow(input: {
       phase: input.phase,
       message
     }
+  };
+}
+
+function diagnosticError(error: unknown): { name: string; message: string; stack?: string } {
+  if (error instanceof Error) {
+    return {
+      name: error.name,
+      message: error.message,
+      stack: error.stack
+    };
+  }
+
+  return {
+    name: "Error",
+    message: String(error)
   };
 }
