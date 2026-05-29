@@ -56,6 +56,26 @@ test("cash deposit credits the selected account and terminal cash", async () => 
   assert.equal(result.summary.terminalCashAfter, 5500);
 });
 
+test("fast cash reports the fixed amount after explicit confirmation", async () => {
+  const result = await runSimulation({
+    transaction: "FastCash",
+    account: "Savings"
+  });
+
+  assert.equal(result.summary.selectedTransaction, "FastCash");
+  assert.equal(result.summary.selectedAccount, "Savings");
+  assert.equal(result.summary.selectedAmount, 100);
+  assert.equal(result.summary.balanceBefore, 3850);
+  assert.equal(result.summary.balanceAfter, 3750);
+  assert.equal(result.summary.terminalCashAfter, 4900);
+  assert.equal(
+    result.events.some(
+      (event) => event.type === "ui.prompt" && event.payload?.screen === "FastCashConfirm"
+    ),
+    true
+  );
+});
+
 test("cash withdrawal fails when account funds are insufficient", async () => {
   const result = await runSimulation({
     transaction: "CashWithdrawal",

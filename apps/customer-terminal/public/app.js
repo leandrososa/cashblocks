@@ -91,141 +91,162 @@ function render() {
 
 function screen() {
   if (state.stage === "pin") {
+    const actionItems = [
+      { label: "Cancel", action: "reset" }
+    ];
     return {
       status: "PIN",
       eyebrow: "Secure input",
       title: "Enter your PIN",
       message: "Use the keypad. This simulator accepts any four digits.",
       active: "card",
-      body: secureDots(state.pin) + keypad("pin") + actions([
-        { label: "Clear", action: "clearPin" },
-        { label: "Cancel", action: "reset" }
-      ])
+      fdk: actionItems,
+      body: secureDots(state.pin) + keypad("pin") + actions(actionItems)
     };
   }
 
   if (state.stage === "transaction") {
     const customerOptions = (state.prompt?.options || []).filter((option) => !option.startsWith("Admin"));
+    const actionItems = [
+      ...customerOptions.map((option) => ({ label: labels[option] || option, action: "answer:" + option })),
+      { label: "Operator access", action: "operator" }
+    ];
     return {
       status: "MENU",
       eyebrow: "Main menu",
       title: "Choose a transaction",
       message: "Select the service you want to perform.",
       active: "card",
-      body: actions([
-        ...customerOptions.map((option) => ({ label: labels[option] || option, action: "answer:" + option })),
-        { label: "Operator access", action: "operator" }
-      ])
+      fdk: actionItems,
+      body: actions(actionItems)
     };
   }
 
   if (state.stage === "account") {
+    const actionItems = (state.prompt?.options || []).map((option) => ({ label: option, action: "answer:" + option }));
     return {
       status: "ACCOUNT",
       eyebrow: "Account",
       title: "Select account",
       message: "Choose which account to use.",
       active: "card",
-      body: actions((state.prompt?.options || []).map((option) => ({ label: option, action: "answer:" + option })))
+      fdk: actionItems,
+      body: actions(actionItems)
     };
   }
 
   if (state.stage === "amount") {
     const presets = state.prompt?.presets || [];
+    const actionItems = presets.map((amount) => ({ label: money(amount), action: "answer:" + amount }));
     return {
       status: "AMOUNT",
       eyebrow: "Amount",
       title: state.prompt?.prompt || "Select amount",
       message: "Choose a preset amount or enter a custom amount.",
       active: "cash",
-      body: actions(presets.map((amount) => ({ label: money(amount), action: "answer:" + amount }))) +
+      fdk: actionItems,
+      body: actions(actionItems) +
         "<div class='amount-entry'>" + (state.amount ? money(Number(state.amount)) : "Enter amount") + "</div>" +
         keypad("amount")
     };
   }
 
   if (state.stage === "option") {
+    const optionItems = (state.prompt?.options || []).map((option) => ({ label: formatOptionLabel(option), action: "answer:" + option }));
+    const isPrinterDown = state.prompt?.screen === "PrinterDown";
+    const isFastCashConfirm = state.prompt?.screen === "FastCashConfirm";
     return {
       status: "OPTION",
       eyebrow: "Decision",
-      title: state.prompt?.screen === "PrinterDown" ? "Receipt unavailable" : state.prompt?.prompt || "Choose option",
-      message: "Choose how to continue.",
-      active: "receipt",
-      body: actions((state.prompt?.options || []).map((option) => ({ label: option, action: "answer:" + option })))
+      title: isPrinterDown ? "Receipt unavailable" : isFastCashConfirm ? "Confirm fast cash" : state.prompt?.prompt || "Choose option",
+      message: isFastCashConfirm ? "Fast cash will withdraw $100 from the selected account." : "Choose how to continue.",
+      active: isFastCashConfirm ? "cash" : "receipt",
+      fdk: optionItems,
+      body: actions(optionItems)
     };
   }
 
   if (state.stage === "operator-code") {
+    const actionItems = [
+      { label: "Cancel", action: "reset" }
+    ];
     return {
       status: "SERVICE",
       eyebrow: "Operator",
       title: "Enter service code",
       message: "Use 0000 in this simulator.",
       active: "card",
-      body: secureDots(state.adminCode) + keypad("admin") + actions([
-        { label: "Clear", action: "clearAdmin" },
-        { label: "Cancel", action: "reset" }
-      ])
+      fdk: actionItems,
+      body: secureDots(state.adminCode) + keypad("admin") + actions(actionItems)
     };
   }
 
   if (state.stage === "operator-menu") {
+    const actionItems = [
+      { label: "Balance terminal", action: "admin:AdminBalanceTerminal" },
+      { label: "Cash adjustment", action: "admin:AdminCashAdjustment" },
+      { label: "Print totals", action: "admin:AdminPrintTotals" },
+      { label: "Exit service", action: "reset" }
+    ];
     return {
       status: "SERVICE",
       eyebrow: "Operator menu",
       title: "Terminal administration",
       message: "Choose an operator function.",
       active: "receipt",
-      body: actions([
-        { label: "Balance terminal", action: "admin:AdminBalanceTerminal" },
-        { label: "Cash adjustment", action: "admin:AdminCashAdjustment" },
-        { label: "Print totals", action: "admin:AdminPrintTotals" },
-        { label: "Exit service", action: "reset" }
-      ])
+      fdk: actionItems,
+      body: actions(actionItems)
     };
   }
 
   if (state.stage === "processing") {
+    const actionItems = [{ label: "Processing...", action: "none", disabled: true }];
     return {
       status: "PROCESSING",
       eyebrow: "Please wait",
       title: "Processing",
       message: "The terminal is completing your request.",
       active: "cash",
-      body: actions([{ label: "Processing...", action: "none", disabled: true }])
+      fdk: actionItems,
+      body: actions(actionItems)
     };
   }
 
   if (state.stage === "result" && state.result) {
     const summary = state.result.summary;
+    const actionItems = resultActions(summary);
     return {
       status: summary.status,
       eyebrow: summary.failed ? "Unable to complete" : "Complete",
       title: summary.screenTitle,
       message: summary.screenMessage,
       active: summary.selectedTransaction === "CashDeposit" ? "deposit" : "receipt",
-      body: details(summary) + actions(resultActions(summary))
+      fdk: actionItems,
+      body: details(summary) + actions(actionItems)
     };
   }
 
+  const actionItems = [
+    { label: "Insert card", action: "start" },
+    { label: "Tap card", action: "start" },
+    { label: "Cardless access", action: "cardless" },
+    { label: "Operator access", action: "operator" }
+  ];
   return {
     status: "WELCOME",
     eyebrow: "Welcome",
     title: "Insert or tap card",
     message: "Start a complete Cashblocks ATM session.",
     active: "card",
-    body: actions([
-      { label: "Insert card", action: "start" },
-      { label: "Tap card", action: "start" },
-      { label: "Cardless access", action: "cardless" },
-      { label: "Operator access", action: "operator" }
-    ])
+    fdk: actionItems,
+    body: actions(actionItems)
   };
 }
 
 function frame(view) {
+  const fdk = view.fdk || [];
   return "<div class='terminal'>" +
-    sideKeys() +
+    sideKeys(fdk.slice(0, 4)) +
     "<section class='screen'>" +
       "<div class='topbar'><span>Cashblocks ATM</span><span>" + escapeHtml(view.status) + "</span></div>" +
       "<div class='content'>" +
@@ -241,7 +262,7 @@ function frame(view) {
         slot("Receipt", view.active === "receipt") +
       "</div>" +
     "</section>" +
-    sideKeys() +
+    sideKeys(fdk.slice(4, 8)) +
   "</div>";
 }
 
@@ -260,14 +281,6 @@ function handle(action) {
     return render();
   }
   if (action === "finish") return reset();
-  if (action === "clearPin") {
-    state.pin = "";
-    return render();
-  }
-  if (action === "clearAdmin") {
-    state.adminCode = "";
-    return render();
-  }
   if (action.startsWith("answer:")) return answer(action.slice("answer:".length));
   if (action.startsWith("pin:")) return handlePin(action.slice(4));
   if (action.startsWith("amount:")) return handleAmount(action.slice(7));
@@ -280,6 +293,10 @@ function runAdmin(transaction) {
 }
 
 function handlePin(key) {
+  if (key === "Clear") {
+    state.pin = "";
+    return render();
+  }
   if (key === "Enter") {
     if (state.pin.length >= 4) answer(state.pin);
     return;
@@ -290,6 +307,10 @@ function handlePin(key) {
 }
 
 function handleAmount(key) {
+  if (key === "Clear") {
+    state.amount = "";
+    return render();
+  }
   if (key === "Enter") {
     if (Number(state.amount) > 0) answer(state.amount);
     return;
@@ -299,6 +320,10 @@ function handleAmount(key) {
 }
 
 function handleAdmin(key) {
+  if (key === "Clear") {
+    state.adminCode = "";
+    return render();
+  }
   if (key === "Enter") {
     if (state.adminCode === "0000") state.stage = "operator-menu";
     return render();
@@ -329,7 +354,7 @@ function actions(items) {
 }
 
 function keypad(mode) {
-  return "<div class='keypad'>" + ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "Enter"].map((key) =>
+  return "<div class='keypad'>" + ["1", "2", "3", "4", "5", "6", "7", "8", "9", "Clear", "0", "Enter"].map((key) =>
     "<button class='key' data-action='" + mode + ":" + key + "'>" + escapeHtml(key) + "</button>"
   ).join("") + "</div>";
 }
@@ -371,8 +396,15 @@ function secureDots(value) {
   return "<div class='secure'>" + "*".repeat(value.length).padEnd(4, "•") + "</div>";
 }
 
-function sideKeys() {
-  return "<aside class='side'><div class='side-key'></div><div class='side-key'></div><div class='side-key'></div><div class='side-key'></div></aside>";
+function sideKeys(items) {
+  const padded = [...items];
+  while (padded.length < 4) padded.push(null);
+  return "<aside class='side'>" + padded.map((item) => {
+    if (!item) return "<button class='side-key empty' disabled></button>";
+    return "<button class='side-key' data-action='" + escapeHtml(item.action) + "'" +
+      (item.disabled ? " disabled" : "") +
+      " title='" + escapeHtml(item.label) + "'>" + escapeHtml(fdkLabel(item.label)) + "</button>";
+  }).join("") + "</aside>";
 }
 
 function slot(label, active) {
@@ -391,6 +423,37 @@ function formatAccounts(accounts) {
 
 function formatAdminOperation(operation) {
   return String(operation).replaceAll("_", " ");
+}
+
+function formatOptionLabel(option) {
+  if (option === "YES") return "Continue";
+  if (option === "NO") return "Cancel";
+  if (option === "Withdraw100") return "Withdraw $100";
+  return option;
+}
+
+function fdkLabel(label) {
+  const text = String(label);
+  const map = {
+    "Insert card": "Insert",
+    "Tap card": "Tap",
+    "Cardless access": "Cardless",
+    "Operator access": "Operator",
+    "Cash withdrawal": "Withdraw",
+    "Balance inquiry": "Balance",
+    "Cash deposit": "Deposit",
+    "Fast cash": "Fast",
+    "Cardless withdrawal": "Cardless",
+    "Balance terminal": "Balance",
+    "Cash adjustment": "Cash adj.",
+    "Print totals": "Totals",
+    "Exit service": "Exit",
+    "Print receipt": "Print",
+    "Receipt printed": "Printed",
+    "Try again": "Retry",
+    "Withdraw $100": "$100"
+  };
+  return map[text] || text;
 }
 
 function escapeHtml(value) {

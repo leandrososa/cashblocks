@@ -114,7 +114,11 @@ export function summarizeEvents(events: RuntimeEvent[], flowOk = true): Simulati
   const selectedAccount =
     typeof account?.payload?.account === "string" ? account.payload.account : undefined;
   const selectedAmount =
-    typeof amount?.payload?.amount === "number" ? amount.payload.amount : undefined;
+    typeof amount?.payload?.amount === "number"
+      ? amount.payload.amount
+      : typeof completed?.payload?.amount === "number"
+        ? completed.payload.amount
+        : undefined;
   const balanceBefore =
     typeof completed?.payload?.balanceBefore === "number" ? completed.payload.balanceBefore : undefined;
   const balanceAfter =

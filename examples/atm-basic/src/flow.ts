@@ -159,6 +159,9 @@ export default defineFlow(
           FastCash.Account = CoreSession.CurrentAccount;
           FastCash.AmountSelector.AmountPreset = 100;
           FastCash.Amount = FastCash.AmountSelector.AmountPreset;
+          if ((await Customer.SelectOption("FastCashConfirm", "Withdraw100,Cancel")) === "Cancel") {
+            return;
+          }
           CoreSession.LastTransactionAmount = FastCash.Amount;
           await FastCash.Execute();
         } else if (transaction === "AdminBalanceTerminal") {

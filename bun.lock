@@ -9,6 +9,10 @@
         "typescript": "^5.8.3",
       },
     },
+    "apps/customer-terminal": {
+      "name": "@cashblocks/customer-terminal",
+      "version": "0.1.0",
+    },
     "apps/terminal-shell": {
       "name": "@cashblocks/terminal-shell",
       "version": "0.1.0",
@@ -33,9 +37,15 @@
       "name": "@cashblocks/runtime-core",
       "version": "0.1.0",
     },
+    "packages/terminal-session": {
+      "name": "@cashblocks/terminal-session",
+      "version": "0.1.0",
+    },
   },
   "packages": {
     "@cashblocks/atm-modules": ["@cashblocks/atm-modules@workspace:packages/atm-modules"],
+
+    "@cashblocks/customer-terminal": ["@cashblocks/customer-terminal@workspace:apps/customer-terminal"],
 
     "@cashblocks/example-atm-basic": ["@cashblocks/example-atm-basic@workspace:examples/atm-basic"],
 
@@ -44,6 +54,8 @@
     "@cashblocks/runtime-contracts": ["@cashblocks/runtime-contracts@workspace:packages/runtime-contracts"],
 
     "@cashblocks/runtime-core": ["@cashblocks/runtime-core@workspace:packages/runtime-core"],
+
+    "@cashblocks/terminal-session": ["@cashblocks/terminal-session@workspace:packages/terminal-session"],
 
     "@cashblocks/terminal-shell": ["@cashblocks/terminal-shell@workspace:apps/terminal-shell"],
 
