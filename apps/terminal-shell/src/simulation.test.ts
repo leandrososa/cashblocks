@@ -86,6 +86,17 @@ test("runs operator admin without customer pin steps", async () => {
   );
 });
 
+test("operator cash adjustment updates terminal cash", async () => {
+  const result = await runSimulation({
+    transaction: "AdminCashAdjustment",
+    customerType: "OperatorAdmin"
+  });
+
+  assert.equal(result.summary.selectedTransaction, "AdminCashAdjustment");
+  assert.equal(result.summary.status, "completed");
+  assert.equal(result.summary.terminalCashAfter, 5010);
+});
+
 test("surfaces declined host simulations", async () => {
   const result = await runSimulation({
     transaction: "CashWithdrawal",

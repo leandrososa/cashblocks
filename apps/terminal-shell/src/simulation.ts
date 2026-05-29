@@ -122,7 +122,9 @@ export function summarizeEvents(events: RuntimeEvent[], flowOk = true): Simulati
   const terminalCashAfter =
     typeof completed?.payload?.terminalCashAfter === "number"
       ? completed.payload.terminalCashAfter
-      : undefined;
+      : typeof completed?.payload?.terminalCash === "number"
+        ? completed.payload.terminalCash
+        : undefined;
   const failureCode =
     typeof failed?.payload?.code === "string"
       ? failed.payload.code

@@ -449,6 +449,7 @@ export class CashDepositModule extends AtmModule {
 
 export class AdminModule extends AtmModule {
   private operation = "none";
+  private cashAdjustmentAction = "";
 
   constructor(runtime: CashblocksRuntime) {
     super(runtime, "TerminalAdmin");
@@ -458,8 +459,9 @@ export class AdminModule extends AtmModule {
     this.operation = "balance";
   }
 
-  PrepareCashAdjustment(): void {
+  PrepareCashAdjustment(action = ""): void {
     this.operation = "cash_adjustment";
+    this.cashAdjustmentAction = action;
   }
 
   PrepareSubtotals(): void {
@@ -467,13 +469,36 @@ export class AdminModule extends AtmModule {
   }
 
   async Execute(): Promise<TransactionResult> {
+    const payload: Record<string, JsonValue> = {
+      transaction: this.Name,
+      operation: this.operation
+    };
+
+    if (this.operation === "balance" || this.operation === "subtotals") {
+      payload.terminalCash = this.runtime.Simulator.terminalCash;
+      payload.accounts = this.runtime.Simulator.accounts;
+    }
+
+    if (this.operation === "cash_adjustment") {
+      const adjustment = parseCashAdjustment(this.cashAdjustmentAction);
+      if (adjustment.amount > 0) {
+        const cash = adjustment.direction === "add"
+          ? this.runtime.Simulator.addTerminalCash(adjustment.amount)
+          : this.runtime.Simulator.removeTerminalCash(adjustment.amount);
+        payload.cashAdjustment = this.cashAdjustmentAction;
+        payload.amount = adjustment.direction === "remove" ? -adjustment.amount : adjustment.amount;
+        payload.terminalCashBefore = cash.before;
+        payload.terminalCashAfter = cash.after;
+      }
+    }
+
     this.runtime.Journal.append({
       type: "transaction.completed",
       source: "module",
       sessionId: this.runtime.SessionId,
-      payload: { transaction: this.Name, operation: this.operation }
+      payload
     });
-    return this.runtime.result(true, "ADMIN_OK", `Admin ${this.operation} completed.`);
+    return this.runtime.result(true, "ADMIN_OK", `Admin ${this.operation} completed.`, payload);
   }
 }
 
@@ -540,5 +565,16 @@ function diagnosticError(error: unknown): { name: string; message: string; stack
   return {
     name: "Error",
     message: String(error)
+  };
+}
+
+function parseCashAdjustment(action: string): { direction: "add" | "remove"; amount: number } {
+  const match = /^(Add|Remove)(\d+)$/.exec(action);
+  if (!match) {
+    return { direction: "add", amount: 0 };
+  }
+  return {
+    direction: match[1] === "Remove" ? "remove" : "add",
+    amount: Number(match[2])
   };
 }

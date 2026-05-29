@@ -165,7 +165,10 @@ export default defineFlow(
           TerminalAdmin.PrepareBalance();
           await TerminalAdmin.Execute();
         } else if (transaction === "AdminCashAdjustment") {
-          TerminalAdmin.PrepareCashAdjustment();
+          const options = Cashblocks.GetProperty("CustomerApp.TerminalAdmin.CashAdjustmentOptions");
+          const optionCsv = Array.isArray(options) ? options.join(",") : "Add10,Add20,Add50,Remove10,Remove20,Remove50";
+          const adjustment = await Customer.SelectOption("CashAdjustment", optionCsv);
+          TerminalAdmin.PrepareCashAdjustment(adjustment);
           await TerminalAdmin.Execute();
         } else if (transaction === "AdminPrintTotals") {
           TerminalAdmin.PrepareSubtotals();
