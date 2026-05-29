@@ -41,6 +41,20 @@ POST /api/session/start
 POST /api/session/answer
 ```
 
+## Run the Customer Terminal
+
+```sh
+bun run customer
+```
+
+Open `http://localhost:4174`.
+
+This is the customer-facing kiosk simulation. It has no developer fault panel,
+selector, or journal timeline. Start from `Insert card`, choose the transaction
+inside the ATM screen, and finish with `Print receipt` or `Finish`.
+
+Operator mode is available through `Operator access` with service code `0000`.
+
 ## Persist Journal History
 
 ```sh

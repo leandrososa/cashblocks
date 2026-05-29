@@ -15,6 +15,7 @@ flow architecture, and adapter boundaries.
 | Flow SDK | Done |
 | Example ATM flow | Done |
 | Browser shell | Done |
+| Customer-facing terminal app | Done |
 | JSONL journal persistence | Done |
 | Diagnostic logging contracts | Done |
 | Simulator account balances and terminal cash | Done |

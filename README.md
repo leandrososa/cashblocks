@@ -19,9 +19,18 @@ bun run test
 bun run dev
 ```
 
-`bun run dev` starts the browser shell at `http://localhost:4173`. The shell
+`bun run dev` starts the developer shell at `http://localhost:4173`. The shell
 drives the example ATM flow, lets you flip simulated device and host faults, and
 shows the resulting journal timeline.
+
+For the customer-facing kiosk experience:
+
+```sh
+bun run customer
+```
+
+Open `http://localhost:4174`. This app hides simulator controls and journal
+inspection so the flow feels like a real terminal session.
 
 For durable demo history:
 
@@ -57,6 +66,7 @@ This writes JSONL journal events to `./data/demo.journal.jsonl`.
 - `packages/flow-sdk`: `defineFlow`, `runFlow`, and controlled runtime globals.
 - `examples/atm-basic`: simulator-backed ATM flow package.
 - `apps/terminal-shell`: local browser shell for running and inspecting the demo.
+- `apps/customer-terminal`: full-screen customer-facing terminal simulation.
 
 ## Useful Commands
 
@@ -66,6 +76,7 @@ bun run typecheck
 bun run test
 bun run example:atm
 bun run dev
+bun run customer
 bun run demo
 ```
 

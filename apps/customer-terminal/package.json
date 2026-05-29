@@ -1,0 +1,7 @@
+{
+  "name": "@cashblocks/customer-terminal",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "../../dist/apps/customer-terminal/src/dev-server.js",
+  "types": "../../dist/apps/customer-terminal/src/dev-server.d.ts"
+}
