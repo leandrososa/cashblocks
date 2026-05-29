@@ -164,6 +164,9 @@ function renderResult(result) {
   const details = [
     summary.selectedAccount ? detail("Account", summary.selectedAccount) : "",
     summary.selectedAmount ? detail("Amount", money(summary.selectedAmount)) : "",
+    summary.balanceBefore != null ? detail("Balance before", money(summary.balanceBefore)) : "",
+    summary.balanceAfter != null ? detail("Balance after", money(summary.balanceAfter)) : "",
+    summary.terminalCashAfter != null ? detail("Terminal cash", money(summary.terminalCashAfter)) : "",
     terminal.receiptPrinted ? detail("Receipt", "Printed") : detail("Receipt", "Not printed")
   ].join("");
 

@@ -110,6 +110,7 @@ export type CardReaderAdapter = {
 export type HostAuthorizationRequest = {
   transaction: string;
   host: string;
+  account?: string;
   amount?: number;
   currencyCode: string;
   pinless: boolean;

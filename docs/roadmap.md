@@ -17,6 +17,7 @@ flow architecture, and adapter boundaries.
 | Browser shell | Done |
 | JSONL journal persistence | Done |
 | Diagnostic logging contracts | Done |
+| Simulator account balances and terminal cash | Done |
 | Introductory developer docs | Done |
 
 ## Next Priority
@@ -25,7 +26,7 @@ flow architecture, and adapter boundaries.
 | --- | --- |
 | Documentation | Expand API reference and cookbook examples. |
 | Flow testing | Add more examples for cancellation, warnings, and device faults. |
-| Simulator profiles | Model richer device capabilities without binding to vendors. |
+| Simulator profiles | Model richer device and cash-management capabilities without binding to vendors. |
 | Observability | Add configurable diagnostic log sinks and correlation conventions. |
 | Adapter design | Refine contracts before real hardware integrations. |
 

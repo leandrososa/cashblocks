@@ -20,6 +20,9 @@ test("runs a successful cash withdrawal simulation", async () => {
   assert.equal(result.summary.selectedTransaction, "CashWithdrawal");
   assert.equal(result.summary.selectedAccount, "Savings");
   assert.equal(result.summary.selectedAmount, 200);
+  assert.equal(result.summary.balanceBefore, 3850);
+  assert.equal(result.summary.balanceAfter, 3650);
+  assert.equal(result.summary.terminalCashAfter, 4800);
   assert.equal(result.summary.status, "completed");
   assert.equal(result.summary.screenTitle, "Cash Withdrawal complete");
   assert.deepEqual(
@@ -36,6 +39,32 @@ test("runs a successful cash withdrawal simulation", async () => {
   assert.equal(result.summary.terminalSteps.at(-1)?.state, "done");
   assert.equal(result.summary.completed, true);
   assert.equal(result.summary.failed, false);
+});
+
+test("cash deposit credits the selected account and terminal cash", async () => {
+  const result = await runSimulation({
+    transaction: "CashDeposit",
+    account: "Checking",
+    amount: 500
+  });
+
+  assert.equal(result.summary.selectedTransaction, "CashDeposit");
+  assert.equal(result.summary.selectedAccount, "Checking");
+  assert.equal(result.summary.selectedAmount, 500);
+  assert.equal(result.summary.balanceBefore, 1240);
+  assert.equal(result.summary.balanceAfter, 1740);
+  assert.equal(result.summary.terminalCashAfter, 5500);
+});
+
+test("cash withdrawal fails when account funds are insufficient", async () => {
+  const result = await runSimulation({
+    transaction: "CashWithdrawal",
+    account: "Checking",
+    amount: 2000
+  });
+
+  assert.equal(result.summary.status, "failed");
+  assert.equal(result.summary.failureCode, "INSUFFICIENT_FUNDS");
 });
 
 test("runs operator admin without customer pin steps", async () => {

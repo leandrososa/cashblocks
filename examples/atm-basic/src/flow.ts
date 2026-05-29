@@ -107,6 +107,7 @@ export default defineFlow(
 
         if (transaction === "CardlessWithdrawal") {
           CoreSession.CurrentAccount = await Customer.SelectAccount(["Checking", "Savings"]);
+          CardlessCashWithdrawal.Account = CoreSession.CurrentAccount;
           CardlessCashWithdrawal.Amount = await Customer.SelectAmount({
             prompt: "Select cardless withdrawal amount",
             currencyCode: Cashblocks.GetProperty<string>("Currency.Code") ?? "AUD",
@@ -122,6 +123,7 @@ export default defineFlow(
           await CardlessCashWithdrawal.Execute();
         } else if (transaction === "CashWithdrawal") {
           CoreSession.CurrentAccount = await Customer.SelectAccount(["Checking", "Savings", "Credit"]);
+          CashWithdrawal.Account = CoreSession.CurrentAccount;
           CashWithdrawal.Amount = await Customer.SelectAmount({
             prompt: "Select withdrawal amount",
             currencyCode: Cashblocks.GetProperty<string>("Currency.Code") ?? "AUD",
@@ -136,9 +138,11 @@ export default defineFlow(
           await CashWithdrawal.Execute();
         } else if (transaction === "BalanceInquiry") {
           CoreSession.CurrentAccount = await Customer.SelectAccount(["Checking", "Savings", "Credit"]);
+          BalanceInquiry.Account = CoreSession.CurrentAccount;
           await BalanceInquiry.Execute();
         } else if (transaction === "CashDeposit") {
           CoreSession.CurrentAccount = await Customer.SelectAccount(["Checking", "Savings"]);
+          CashDeposit.Account = CoreSession.CurrentAccount;
           CashDeposit.ExpectedAmount = await Customer.SelectAmount({
             prompt: "Confirm deposit amount",
             currencyCode: Cashblocks.GetProperty<string>("Currency.Code") ?? "AUD",
@@ -152,6 +156,7 @@ export default defineFlow(
           await CashDeposit.Execute();
         } else if (transaction === "FastCash") {
           CoreSession.CurrentAccount = await Customer.SelectAccount(["Checking", "Savings"]);
+          FastCash.Account = CoreSession.CurrentAccount;
           FastCash.AmountSelector.AmountPreset = 100;
           FastCash.Amount = FastCash.AmountSelector.AmountPreset;
           CoreSession.LastTransactionAmount = FastCash.Amount;

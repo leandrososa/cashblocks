@@ -231,6 +231,7 @@ export class AuthorizationModule {
 
 export class BalanceInquiryModule extends AtmModule {
   DisplayBalanceOnScreen = false;
+  Account = "Checking";
 
   constructor(runtime: CashblocksRuntime) {
     super(runtime, "BalanceInquiry");
@@ -252,6 +253,8 @@ export class BalanceInquiryModule extends AtmModule {
       sessionId: this.runtime.SessionId,
       payload: {
         transaction: this.Name,
+        account: this.Account,
+        balance: this.runtime.Simulator.balance(this.Account),
         displayBalanceOnScreen: this.DisplayBalanceOnScreen
       }
     });
@@ -263,6 +266,7 @@ export class BalanceInquiryModule extends AtmModule {
 export class CashWithdrawalModule extends AtmModule {
   readonly Authorization = new AuthorizationModule();
   Amount = 100;
+  Account = "Checking";
 
   constructor(runtime: CashblocksRuntime, name = "CashWithdrawal") {
     super(runtime, name);
@@ -291,12 +295,13 @@ export class CashWithdrawalModule extends AtmModule {
         this.runtime.Adapters.hostAuthorization.authorize({
           transaction: this.Name,
           host: this.Authorization.TransactionHost,
+          account: this.Account,
           amount: this.Amount,
           currencyCode,
           pinless: this.Authorization.PinlessAuthorizationEnabled,
           chipRequired: this.Authorization.ChipAuthorizationRequired
         }),
-      { transaction: this.Name }
+      { transaction: this.Name, account: this.Account }
     );
 
     this.runtime.Journal.append({
@@ -343,6 +348,8 @@ export class CashWithdrawalModule extends AtmModule {
       return this.runtime.result(false, dispense.code, dispense.message);
     }
 
+    const balance = this.runtime.Simulator.debit(this.Account, this.Amount);
+
     await this.handlers.emit("OnEndReceiptOption");
 
     this.runtime.Journal.append({
@@ -351,11 +358,22 @@ export class CashWithdrawalModule extends AtmModule {
       sessionId: this.runtime.SessionId,
       payload: {
         transaction: this.Name,
+        account: this.Account,
         amount: this.Amount,
-        currencyCode
+        currencyCode,
+        balanceBefore: balance.before,
+        balanceAfter: balance.after,
+        terminalCashAfter: this.runtime.Simulator.terminalCash
       }
     });
-    return this.runtime.result(true, "WITHDRAWAL_OK", `${this.Name} completed.`);
+    return this.runtime.result(true, "WITHDRAWAL_OK", `${this.Name} completed.`, {
+      account: this.Account,
+      amount: this.Amount,
+      currencyCode,
+      balanceBefore: balance.before,
+      balanceAfter: balance.after,
+      terminalCashAfter: this.runtime.Simulator.terminalCash
+    });
   }
 }
 
@@ -372,6 +390,7 @@ export class FastCashModule extends CashWithdrawalModule {
 export class CashDepositModule extends AtmModule {
   readonly Authorization = new AuthorizationModule();
   ExpectedAmount = 0;
+  Account = "Checking";
 
   constructor(runtime: CashblocksRuntime) {
     super(runtime, "CashDeposit");
@@ -401,17 +420,30 @@ export class CashDepositModule extends AtmModule {
       return this.runtime.result(false, accepted.code, accepted.message);
     }
 
+    const balance = this.runtime.Simulator.credit(this.Account, this.ExpectedAmount);
+
     this.runtime.Journal.append({
       type: "transaction.completed",
       source: "module",
       sessionId: this.runtime.SessionId,
       payload: {
         transaction: this.Name,
+        account: this.Account,
         amount: this.ExpectedAmount,
-        currencyCode
+        currencyCode,
+        balanceBefore: balance.before,
+        balanceAfter: balance.after,
+        terminalCashAfter: this.runtime.Simulator.terminalCash
       }
     });
-    return this.runtime.result(true, "DEPOSIT_OK", "Cash deposit completed.");
+    return this.runtime.result(true, "DEPOSIT_OK", "Cash deposit completed.", {
+      account: this.Account,
+      amount: this.ExpectedAmount,
+      currencyCode,
+      balanceBefore: balance.before,
+      balanceAfter: balance.after,
+      terminalCashAfter: this.runtime.Simulator.terminalCash
+    });
   }
 }
 

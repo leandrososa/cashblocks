@@ -24,6 +24,9 @@ export type SimulationSummary = {
   selectedTransaction?: string;
   selectedAccount?: string;
   selectedAmount?: number;
+  balanceBefore?: number;
+  balanceAfter?: number;
+  terminalCashAfter?: number;
   status: "completed" | "failed" | "cancelled" | "idle";
   screenTitle: string;
   screenMessage: string;
@@ -125,6 +128,18 @@ export function summarizeEvents(events: RuntimeEvent[], flowOk = true): Simulati
     typeof account?.payload?.account === "string" ? account.payload.account : undefined;
   const selectedAmount =
     typeof amount?.payload?.amount === "number" ? amount.payload.amount : undefined;
+  const balanceBefore =
+    typeof completed?.payload?.balanceBefore === "number" ? completed.payload.balanceBefore : undefined;
+  const balanceAfter =
+    typeof completed?.payload?.balanceAfter === "number"
+      ? completed.payload.balanceAfter
+      : typeof completed?.payload?.balance === "number"
+        ? completed.payload.balance
+        : undefined;
+  const terminalCashAfter =
+    typeof completed?.payload?.terminalCashAfter === "number"
+      ? completed.payload.terminalCashAfter
+      : undefined;
   const failureCode =
     typeof failed?.payload?.code === "string"
       ? failed.payload.code
@@ -143,6 +158,9 @@ export function summarizeEvents(events: RuntimeEvent[], flowOk = true): Simulati
     selectedTransaction,
     selectedAccount,
     selectedAmount,
+    balanceBefore,
+    balanceAfter,
+    terminalCashAfter,
     failureCode,
     warningOffered: Boolean(warning),
     events
@@ -154,6 +172,9 @@ export function summarizeEvents(events: RuntimeEvent[], flowOk = true): Simulati
     selectedTransaction,
     selectedAccount,
     selectedAmount,
+    balanceBefore,
+    balanceAfter,
+    terminalCashAfter,
     status,
     screenTitle: terminalScreen.title,
     screenMessage: terminalScreen.message,
@@ -172,6 +193,9 @@ function createTerminalScreen(input: {
   selectedTransaction?: string;
   selectedAccount?: string;
   selectedAmount?: number;
+  balanceBefore?: number;
+  balanceAfter?: number;
+  terminalCashAfter?: number;
   failureCode?: string;
   warningOffered: boolean;
   events: RuntimeEvent[];
@@ -181,9 +205,11 @@ function createTerminalScreen(input: {
   if (input.status === "completed") {
     const amount = input.selectedAmount ? ` ${input.selectedAmount}` : "";
     const account = input.selectedAccount ? ` on ${input.selectedAccount}` : "";
+    const balance =
+      input.balanceAfter != null ? ` New balance: ${input.balanceAfter}.` : "";
     return {
       title: `${formatTransaction(input.selectedTransaction)} complete`,
-      message: `Thank you. Your transaction${amount}${account} has finished successfully.`,
+      message: `Thank you. Your transaction${amount}${account} has finished successfully.${balance}`,
       operatorMessage: "Flow completed without simulated device or host faults.",
       steps
     };
@@ -217,6 +243,9 @@ function createTerminalSteps(input: {
   selectedTransaction?: string;
   selectedAccount?: string;
   selectedAmount?: number;
+  balanceBefore?: number;
+  balanceAfter?: number;
+  terminalCashAfter?: number;
   failureCode?: string;
   warningOffered: boolean;
   events: RuntimeEvent[];

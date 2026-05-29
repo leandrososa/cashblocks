@@ -200,6 +200,8 @@ export type RuntimeSimulatorOptions = {
   accountSelections?: string[];
   amountSelections?: number[];
   pinEntries?: string[];
+  accounts?: Record<string, number>;
+  terminalCash?: number;
   receiptPrinter?: Partial<ReceiptPrinterStatus>;
   hostApproved?: boolean;
   dispenserOnline?: boolean;
@@ -213,6 +215,8 @@ export class RuntimeSimulator {
   private accountSelections: string[];
   private amountSelections: number[];
   private pinEntries: string[];
+  accounts: Record<string, number>;
+  terminalCash: number;
   receiptPrinter: ReceiptPrinterStatus;
   hostApproved: boolean;
   dispenserOnline: boolean;
@@ -225,6 +229,13 @@ export class RuntimeSimulator {
     this.accountSelections = [...(options.accountSelections ?? ["Checking"])];
     this.amountSelections = [...(options.amountSelections ?? [100])];
     this.pinEntries = [...(options.pinEntries ?? ["1234"])];
+    this.accounts = {
+      Checking: 1240,
+      Savings: 3850,
+      Credit: -320,
+      ...(options.accounts ?? {})
+    };
+    this.terminalCash = options.terminalCash ?? 5000;
     this.receiptPrinter = {
       health: options.receiptPrinter?.health ?? "HEALTHY",
       paper: options.receiptPrinter?.paper ?? "OK"
@@ -256,6 +267,38 @@ export class RuntimeSimulator {
 
   nextPin(): string {
     return this.pinEntries.shift() ?? "1234";
+  }
+
+  balance(account: string): number {
+    return this.accounts[account] ?? 0;
+  }
+
+  debit(account: string, amount: number): { before: number; after: number } {
+    const before = this.balance(account);
+    const after = before - amount;
+    this.accounts[account] = after;
+    return { before, after };
+  }
+
+  credit(account: string, amount: number): { before: number; after: number } {
+    const before = this.balance(account);
+    const after = before + amount;
+    this.accounts[account] = after;
+    return { before, after };
+  }
+
+  removeTerminalCash(amount: number): { before: number; after: number } {
+    const before = this.terminalCash;
+    const after = before - amount;
+    this.terminalCash = after;
+    return { before, after };
+  }
+
+  addTerminalCash(amount: number): { before: number; after: number } {
+    const before = this.terminalCash;
+    const after = before + amount;
+    this.terminalCash = after;
+    return { before, after };
   }
 }
 
@@ -369,11 +412,15 @@ export class SimulatedCashDispenserAdapter implements CashDispenserAdapter {
     if (!this.simulator.dispenserOnline) {
       return adapterResult(false, "DISPENSER_OFFLINE", "Cash dispenser is offline.");
     }
+    if (input.amount > this.simulator.terminalCash) {
+      return adapterResult(false, "INSUFFICIENT_TERMINAL_CASH", "Terminal does not have enough cash.");
+    }
+    const cash = this.simulator.removeTerminalCash(input.amount);
     return {
       ok: true,
       code: "DISPENSED",
       message: "Cash dispensed.",
-      details: { amount: input.amount, currencyCode: input.currencyCode }
+      details: { amount: input.amount, currencyCode: input.currencyCode, terminalCashAfter: cash.after }
     };
   }
 }
@@ -387,13 +434,16 @@ export class SimulatedCashAcceptorAdapter implements CashAcceptorAdapter {
     if (!this.simulator.acceptorOnline) {
       return adapterResult(false, "ACCEPTOR_OFFLINE", "Cash acceptor is offline.");
     }
+    const amount = input.expectedAmount ?? 0;
+    const cash = this.simulator.addTerminalCash(amount);
     return {
       ok: true,
       code: "ACCEPTED",
       message: "Cash accepted.",
       details: {
         expectedAmount: input.expectedAmount ?? null,
-        currencyCode: input.currencyCode
+        currencyCode: input.currencyCode,
+        terminalCashAfter: cash.after
       }
     };
   }
@@ -425,6 +475,17 @@ export class SimulatedHostAuthorizationAdapter implements HostAuthorizationAdapt
         message: "Host declined transaction.",
         details: { transaction: request.transaction, host: request.host }
       };
+    }
+    if (request.amount && request.transaction.includes("Withdrawal")) {
+      const account = request.account ?? "Checking";
+      if (request.amount > this.simulator.balance(account)) {
+        return {
+          ok: false,
+          code: "INSUFFICIENT_FUNDS",
+          message: "Account has insufficient funds.",
+          details: { transaction: request.transaction, host: request.host, account }
+        };
+      }
     }
     return {
       ok: true,
@@ -514,8 +575,13 @@ export class CashblocksRuntime {
     this.Journal.append({ type: "runtime.started", source: "runtime" });
   }
 
-  result(ok: boolean, code: string, message: string): TransactionResult {
-    return { ok, code, message };
+  result(
+    ok: boolean,
+    code: string,
+    message: string,
+    details?: Record<string, JsonValue>
+  ): TransactionResult {
+    return details ? { ok, code, message, details } : { ok, code, message };
   }
 
   logDiagnostic(entry: Omit<DiagnosticLogEntry, "ts" | "sessionId"> & { sessionId?: string }): void {

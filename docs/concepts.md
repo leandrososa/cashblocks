@@ -61,6 +61,21 @@ runtime. The MVP ships simulator adapters for:
 Real XFS, J/XFS, XFS4IoT, ISO8583, legacy host, or vendor integrations should be
 implemented behind these boundaries.
 
+## Simulator State
+
+The simulator includes a small financial world so flows can be evaluated without
+real hardware or host systems:
+
+- account balances for Checking, Savings, and Credit
+- terminal cash inventory
+- selected account and amount prompts
+- host authorization checks for insufficient funds
+- cash movement when withdrawals dispense or deposits are accepted
+
+This is not a banking ledger. It is a deterministic development model that makes
+the demo behave like a real terminal session and gives tests concrete state
+changes to assert.
+
 ## Journal vs Diagnostic Logs
 
 The journal is the audit-style event stream. It records what happened in the
