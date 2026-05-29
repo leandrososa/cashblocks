@@ -197,6 +197,8 @@ export class HandlerRegistry {
 export type RuntimeSimulatorOptions = {
   customerSelections?: string[];
   optionSelections?: string[];
+  accountSelections?: string[];
+  amountSelections?: number[];
   pinEntries?: string[];
   receiptPrinter?: Partial<ReceiptPrinterStatus>;
   hostApproved?: boolean;
@@ -208,6 +210,8 @@ export type RuntimeSimulatorOptions = {
 export class RuntimeSimulator {
   private customerSelections: string[];
   private optionSelections: string[];
+  private accountSelections: string[];
+  private amountSelections: number[];
   private pinEntries: string[];
   receiptPrinter: ReceiptPrinterStatus;
   hostApproved: boolean;
@@ -218,6 +222,8 @@ export class RuntimeSimulator {
   constructor(options: RuntimeSimulatorOptions = {}) {
     this.customerSelections = [...(options.customerSelections ?? ["BalanceInquiry"])];
     this.optionSelections = [...(options.optionSelections ?? ["YES"])];
+    this.accountSelections = [...(options.accountSelections ?? ["Checking"])];
+    this.amountSelections = [...(options.amountSelections ?? [100])];
     this.pinEntries = [...(options.pinEntries ?? ["1234"])];
     this.receiptPrinter = {
       health: options.receiptPrinter?.health ?? "HEALTHY",
@@ -238,6 +244,16 @@ export class RuntimeSimulator {
     return selected && options.includes(selected) ? selected : options[0] ?? "";
   }
 
+  nextAccount(options: string[]): string {
+    const selected = this.accountSelections.shift();
+    return selected && options.includes(selected) ? selected : options[0] ?? "";
+  }
+
+  nextAmount(presets: number[]): number {
+    const selected = this.amountSelections.shift();
+    return selected ?? presets[0] ?? 0;
+  }
+
   nextPin(): string {
     return this.pinEntries.shift() ?? "1234";
   }
@@ -256,6 +272,14 @@ export class SimulatorCustomerInteraction implements CustomerInteraction {
       return {
         value: prompt.options.includes(selected) ? selected : prompt.options[0] ?? ""
       };
+    }
+
+    if (prompt.kind === "account") {
+      return { value: this.simulator.nextAccount(prompt.options) };
+    }
+
+    if (prompt.kind === "amount") {
+      return { value: String(this.simulator.nextAmount(prompt.presets)) };
     }
 
     return { value: this.simulator.nextOption(prompt.screen, prompt.options) };

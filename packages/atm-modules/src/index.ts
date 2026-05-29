@@ -133,6 +133,50 @@ export class CustomerModule extends AtmModule {
     return transaction;
   }
 
+  async SelectAccount(options = ["Checking", "Savings", "Credit"]): Promise<string> {
+    const answer = await this.runtime.Interaction.request({
+      kind: "account",
+      prompt: "Select account",
+      options
+    });
+    const account = options.includes(answer.value) ? answer.value : options[0] ?? "";
+    this.runtime.Journal.append({
+      type: "transaction.detail_recorded",
+      source: "ui",
+      sessionId: this.runtime.SessionId,
+      payload: { detail: "account.selected", account }
+    });
+    return account;
+  }
+
+  async SelectAmount(input: {
+    prompt: string;
+    currencyCode: string;
+    presets: number[];
+    allowCustom?: boolean;
+  }): Promise<number> {
+    const answer = await this.runtime.Interaction.request({
+      kind: "amount",
+      prompt: input.prompt,
+      currencyCode: input.currencyCode,
+      presets: input.presets,
+      allowCustom: input.allowCustom ?? true
+    });
+    const amount = Number(answer.value);
+    const selected = Number.isFinite(amount) && amount > 0 ? amount : input.presets[0] ?? 0;
+    this.runtime.Journal.append({
+      type: "transaction.detail_recorded",
+      source: "ui",
+      sessionId: this.runtime.SessionId,
+      payload: {
+        detail: "amount.selected",
+        amount: selected,
+        currencyCode: input.currencyCode
+      }
+    });
+    return selected;
+  }
+
   async SelectOption(screen: string, optionCsv: string): Promise<string> {
     const options = optionCsv.split(",").map((option) => option.trim()).filter(Boolean);
     const answer = await this.runtime.Interaction.request({
@@ -153,6 +197,8 @@ export class CustomerModule extends AtmModule {
 }
 
 export class SessionModule {
+  CurrentAccount = "Checking";
+  LastTransactionAmount = 0;
   SupportedNotes = {
     Count: 4,
     Item(index: number): number | undefined {
@@ -167,6 +213,7 @@ export class SessionModule {
   }
 
   NewTransaction(): void {
+    this.LastTransactionAmount = 0;
     this.runtime.Cashblocks.Log("New transaction started.");
   }
 
@@ -302,7 +349,11 @@ export class CashWithdrawalModule extends AtmModule {
       type: "transaction.completed",
       source: "module",
       sessionId: this.runtime.SessionId,
-      payload: { transaction: this.Name }
+      payload: {
+        transaction: this.Name,
+        amount: this.Amount,
+        currencyCode
+      }
     });
     return this.runtime.result(true, "WITHDRAWAL_OK", `${this.Name} completed.`);
   }
@@ -354,7 +405,11 @@ export class CashDepositModule extends AtmModule {
       type: "transaction.completed",
       source: "module",
       sessionId: this.runtime.SessionId,
-      payload: { transaction: this.Name }
+      payload: {
+        transaction: this.Name,
+        amount: this.ExpectedAmount,
+        currencyCode
+      }
     });
     return this.runtime.result(true, "DEPOSIT_OK", "Cash deposit completed.");
   }

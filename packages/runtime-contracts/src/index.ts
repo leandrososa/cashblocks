@@ -23,6 +23,7 @@ export type RuntimeEventType =
   | "host.authorization_requested"
   | "host.authorization_result"
   | "journal.line_logged"
+  | "transaction.detail_recorded"
   | "ui.input_received"
   | "ui.prompt";
 
@@ -166,6 +167,18 @@ export type CustomerPrompt =
       kind: "transaction";
       prompt: string;
       options: string[];
+    }
+  | {
+      kind: "account";
+      prompt: string;
+      options: string[];
+    }
+  | {
+      kind: "amount";
+      prompt: string;
+      currencyCode: string;
+      presets: number[];
+      allowCustom: boolean;
     }
   | {
       kind: "option";

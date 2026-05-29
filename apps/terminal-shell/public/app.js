@@ -1,24 +1,36 @@
 const $ = (id) => document.getElementById(id);
 
-const demo = {
+const transactionLabels = {
+  BalanceInquiry: "Balance inquiry",
+  CashWithdrawal: "Cash withdrawal",
+  CashDeposit: "Cash deposit",
+  FastCash: "Fast cash",
+  CardlessWithdrawal: "Cardless withdrawal",
+  AdminBalanceTerminal: "Balance terminal",
+  AdminCashAdjustment: "Cash adjustment",
+  AdminPrintTotals: "Print totals"
+};
+
+const terminal = {
   stage: "idle",
   pin: "",
-  selectedTransaction: $("transaction").value,
+  customAmount: "",
+  adminCode: "",
+  pendingAdmin: "",
+  customerType: "OnUs",
   sessionId: "",
   prompt: null,
   result: null,
-  running: false
+  running: false,
+  receiptPrinted: false
 };
 
-$("run").addEventListener("click", resetDemo);
-$("transaction").addEventListener("change", () => {
-  demo.selectedTransaction = $("transaction").value;
-  if (demo.stage === "select") renderInteractiveTerminal();
-});
+$("run").addEventListener("click", resetTerminal);
 $("runTab").addEventListener("click", () => showTab("run"));
 $("historyTab").addEventListener("click", () => showTab("history"));
+
 loadManifest();
-resetDemo();
+resetTerminal();
 
 function showTab(tab) {
   $("runView").hidden = tab !== "run";
@@ -28,14 +40,18 @@ function showTab(tab) {
   if (tab === "history") loadHistory();
 }
 
-function resetDemo() {
-  demo.stage = "idle";
-  demo.pin = "";
-  demo.selectedTransaction = $("transaction").value;
-  demo.sessionId = "";
-  demo.prompt = null;
-  demo.result = null;
-  demo.running = false;
+function resetTerminal() {
+  terminal.stage = "idle";
+  terminal.pin = "";
+  terminal.customAmount = "";
+  terminal.adminCode = "";
+  terminal.pendingAdmin = "";
+  terminal.customerType = "OnUs";
+  terminal.sessionId = "";
+  terminal.prompt = null;
+  terminal.result = null;
+  terminal.running = false;
+  terminal.receiptPrinted = false;
   renderShellSummary({
     packageId: "cashblocks.example.atm-basic",
     selectedTransaction: "none",
@@ -43,13 +59,13 @@ function resetDemo() {
     eventCount: "0"
   });
   $("timeline").innerHTML = "";
-  renderInteractiveTerminal();
+  renderTerminal();
 }
 
 async function startInteractiveRun() {
-  demo.running = true;
-  demo.stage = "processing";
-  renderInteractiveTerminal();
+  terminal.running = true;
+  terminal.stage = "processing";
+  renderTerminal();
   try {
     const response = await fetch("/api/session/start", {
       method: "POST",
@@ -58,36 +74,37 @@ async function startInteractiveRun() {
     });
     applyInteractiveState(await response.json());
   } finally {
-    demo.running = false;
-    renderInteractiveTerminal();
+    terminal.running = false;
+    renderTerminal();
   }
 }
 
 async function answerPrompt(value) {
-  if (!demo.sessionId || !demo.prompt) return;
-  demo.running = true;
-  demo.stage = "processing";
-  renderInteractiveTerminal();
+  if (!terminal.sessionId || !terminal.prompt) return;
+  terminal.running = true;
+  terminal.stage = "processing";
+  renderTerminal();
   try {
     const response = await fetch("/api/session/answer", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        sessionId: demo.sessionId,
-        promptId: demo.prompt.id,
+        sessionId: terminal.sessionId,
+        promptId: terminal.prompt.id,
         value
       })
     });
     applyInteractiveState(await response.json());
   } finally {
-    demo.running = false;
-    renderInteractiveTerminal();
+    terminal.running = false;
+    renderTerminal();
   }
 }
 
 function simulationRequest() {
   return {
-    transaction: $("transaction").value,
+    transaction: $("sessionMode").value === "cardless" ? "CardlessWithdrawal" : undefined,
+    customerType: $("sessionMode").value === "cardless" ? "TOUCH" : terminal.customerType,
     receiptPrinterOut: $("receiptPrinterOut").checked,
     hostDeclined: $("hostDeclined").checked,
     dispenserOffline: $("dispenserOffline").checked,
@@ -98,22 +115,31 @@ function simulationRequest() {
 }
 
 function applyInteractiveState(state) {
-  demo.sessionId = state.sessionId || demo.sessionId;
-  demo.prompt = state.prompt || null;
-  demo.result = state.completed ? state : null;
+  terminal.sessionId = state.sessionId || terminal.sessionId;
+  terminal.prompt = state.prompt || null;
+  terminal.result = state.completed ? state : null;
 
   if (state.completed) {
-    demo.stage = "result";
+    terminal.stage = "result";
     renderResult(state);
     return;
   }
 
-  if (state.prompt?.kind === "pin") demo.stage = "pin";
-  else if (state.prompt?.kind === "transaction") demo.stage = "select";
-  else if (state.prompt?.kind === "option") demo.stage = "option";
-  else demo.stage = "processing";
+  if (state.prompt?.kind === "pin") terminal.stage = "pin";
+  else if (state.prompt?.kind === "transaction") terminal.stage = "transaction";
+  else if (state.prompt?.kind === "account") terminal.stage = "account";
+  else if (state.prompt?.kind === "amount") terminal.stage = "amount";
+  else if (state.prompt?.kind === "option") terminal.stage = "option";
+  else terminal.stage = "processing";
 
-  if (demo.stage === "pin") demo.pin = "";
+  if (terminal.pendingAdmin && state.prompt?.kind === "transaction") {
+    answerPrompt(terminal.pendingAdmin);
+    terminal.pendingAdmin = "";
+    return;
+  }
+
+  if (terminal.stage === "pin") terminal.pin = "";
+  if (terminal.stage === "amount") terminal.customAmount = "";
 }
 
 async function loadManifest() {
@@ -135,145 +161,184 @@ function renderResult(result) {
     eventCount: String(summary.eventCount)
   });
 
-  $("terminalScreen").innerHTML =
-    "<div class='terminal-bezel'>" +
-      sideKeys() +
-      "<div class='atm-display'>" +
-        "<div class='atm-topbar'><span>Cashblocks ATM</span><span>" + escapeHtml(summary.status) + "</span></div>" +
-        "<div>" +
-          "<h2>" + escapeHtml(summary.screenTitle) + "</h2>" +
-          "<p>" + escapeHtml(summary.screenMessage) + "</p>" +
-          renderAtmActions(summary) +
-          renderTerminalSteps(summary.terminalSteps || []) +
-        "</div>" +
-        "<div>" +
-          "<div class='hardware-strip'><div class='slot'>Card</div><div class='slot'>Cash</div><div class='slot'>Receipt</div></div>" +
-          "<div class='operator-note'>" + escapeHtml(summary.operatorMessage) + "</div>" +
-        "</div>" +
-      "</div>" +
-      sideKeys() +
-    "</div>";
+  const details = [
+    summary.selectedAccount ? detail("Account", summary.selectedAccount) : "",
+    summary.selectedAmount ? detail("Amount", money(summary.selectedAmount)) : "",
+    terminal.receiptPrinted ? detail("Receipt", "Printed") : detail("Receipt", "Not printed")
+  ].join("");
 
+  $("terminalScreen").innerHTML = terminalFrame({
+    status: summary.status,
+    title: summary.screenTitle,
+    message: summary.screenMessage,
+    body: details + renderResultActions(summary),
+    activeSlot: summary.selectedTransaction === "CashDeposit" ? "deposit" : "cash",
+    operatorMessage: summary.operatorMessage,
+    steps: summary.terminalSteps || []
+  });
+  bindTerminalActions();
   $("timeline").innerHTML = result.events.map(renderEvent).join("");
 }
 
-function renderInteractiveTerminal() {
-  if (demo.stage === "result" && demo.result) return;
-
-  const screen = interactiveScreen();
-  $("terminalScreen").innerHTML =
-    "<div class='terminal-bezel'>" +
-      sideKeys() +
-      "<div class='atm-display'>" +
-        "<div class='atm-topbar'><span>Cashblocks ATM</span><span>" + escapeHtml(screen.status) + "</span></div>" +
-        "<div>" +
-          "<div class='status-copy'>" + escapeHtml(screen.eyebrow) + "</div>" +
-          "<h2>" + escapeHtml(screen.title) + "</h2>" +
-          "<p>" + escapeHtml(screen.message) + "</p>" +
-          renderInteractiveActions(screen.actions) +
-          renderPinPad(screen.pinPad) +
-          renderTerminalSteps(screen.steps) +
-        "</div>" +
-        "<div>" +
-          "<div class='hardware-strip'>" +
-            "<div class='slot " + (screen.activeSlot === "card" ? "active" : "") + "'>Card</div>" +
-            "<div class='slot " + (screen.activeSlot === "cash" ? "active" : "") + "'>Cash</div>" +
-            "<div class='slot " + (screen.activeSlot === "receipt" ? "active" : "") + "'>Receipt</div>" +
-          "</div>" +
-          "<div class='operator-note'>" + escapeHtml(screen.operatorMessage) + "</div>" +
-        "</div>" +
-      "</div>" +
-      sideKeys() +
-    "</div>";
-
-  document.querySelectorAll("[data-terminal-action]").forEach((button) => {
-    button.addEventListener("click", () => handleTerminalAction(button.getAttribute("data-terminal-action") || ""));
-  });
+function renderTerminal() {
+  if (terminal.stage === "result" && terminal.result) return;
+  const screen = screenForStage();
+  $("terminalScreen").innerHTML = terminalFrame(screen);
+  bindTerminalActions();
 }
 
-function interactiveScreen() {
-  if (demo.stage === "pin") {
+function terminalFrame(screen) {
+  return "<div class='terminal-bezel real-terminal'>" +
+    sideKeys() +
+    "<div class='atm-display'>" +
+      "<div class='atm-topbar'><span>Cashblocks ATM</span><span>" + escapeHtml(screen.status) + "</span></div>" +
+      "<div class='terminal-content'>" +
+        "<div class='status-copy'>" + escapeHtml(screen.eyebrow || "") + "</div>" +
+        "<h2>" + escapeHtml(screen.title) + "</h2>" +
+        "<p>" + escapeHtml(screen.message) + "</p>" +
+        (screen.body || "") +
+        renderTerminalSteps(screen.steps || customerSteps(screen.status)) +
+      "</div>" +
+      "<div>" +
+        "<div class='hardware-strip'>" +
+          slot("Card", screen.activeSlot === "card") +
+          slot("Cash", screen.activeSlot === "cash") +
+          slot("Deposit", screen.activeSlot === "deposit") +
+          slot("Receipt", screen.activeSlot === "receipt") +
+        "</div>" +
+        "<div class='operator-note'>" + escapeHtml(screen.operatorMessage || "") + "</div>" +
+      "</div>" +
+    "</div>" +
+    sideKeys() +
+  "</div>";
+}
+
+function screenForStage() {
+  if (terminal.stage === "pin") {
     return {
       status: "PIN",
       eyebrow: "Secure customer input",
-      title: "Enter PIN",
-      message: "Use the simulated PIN pad. Any four digits are accepted by this demo runtime.",
-      operatorMessage: "Card credential accepted. Waiting for PIN entry.",
+      title: "Enter your PIN",
+      message: "Use the keypad. The simulator accepts any four digits.",
       activeSlot: "card",
-      pinPad: true,
-      actions: [
-        { label: "Clear", action: "clearPin", disabled: demo.pin.length === 0 },
-        { label: "Cancel", action: "cancel" }
-      ],
-      steps: interactiveSteps("pin")
+      body: renderPinPad(),
+      operatorMessage: "Card accepted. Waiting for PIN.",
+      steps: customerSteps("pin")
     };
   }
 
-  if (demo.stage === "select") {
+  if (terminal.stage === "transaction") {
     return {
-      status: "SELECT",
+      status: "MENU",
       eyebrow: "Main menu",
-      title: "Select transaction",
-      message: "Choose the transaction on the left panel, then confirm it on the terminal screen.",
-      operatorMessage: "The customer is now inside the transaction menu.",
-      activeSlot: selectedCashSlot(),
-      pinPad: false,
-      actions: [
-        { label: "Confirm " + formatTransaction(demo.selectedTransaction), action: "confirmTransaction" },
-        { label: "Cancel", action: "cancel" }
-      ],
-      steps: interactiveSteps("select")
+      title: "Choose a transaction",
+      message: "Select the service you want to perform.",
+      activeSlot: "card",
+      body: renderTransactionMenu(),
+      operatorMessage: "Transaction selection is now handled inside the ATM screen.",
+      steps: customerSteps("transaction")
     };
   }
 
-  if (demo.stage === "option" && demo.prompt) {
+  if (terminal.stage === "account") {
+    return {
+      status: "ACCOUNT",
+      eyebrow: "Account selection",
+      title: "Select account",
+      message: "Choose which account this transaction should use.",
+      activeSlot: "card",
+      body: renderActions((terminal.prompt?.options || []).map((option) => ({
+        label: option,
+        action: "answer:" + option
+      }))),
+      operatorMessage: "The running flow requested an account.",
+      steps: customerSteps("account")
+    };
+  }
+
+  if (terminal.stage === "amount") {
+    return {
+      status: "AMOUNT",
+      eyebrow: "Amount selection",
+      title: terminal.prompt?.prompt || "Select amount",
+      message: "Choose a preset amount or enter a custom amount with the keypad.",
+      activeSlot: "cash",
+      body: renderAmountPrompt(),
+      operatorMessage: "The amount will be passed back to the runtime prompt.",
+      steps: customerSteps("amount")
+    };
+  }
+
+  if (terminal.stage === "option" && terminal.prompt) {
     return {
       status: "OPTION",
       eyebrow: "Customer decision",
-      title: demo.prompt.screen === "PrinterDown" ? "Receipt unavailable" : demo.prompt.prompt,
-      message: "Choose one of the options requested by the running flow.",
-      operatorMessage: "The flow is paused at a customer option prompt.",
+      title: terminal.prompt.screen === "PrinterDown" ? "Receipt unavailable" : terminal.prompt.prompt,
+      message: "Choose how to continue.",
       activeSlot: "receipt",
-      pinPad: false,
-      actions: (demo.prompt.options || []).map((option) => ({
+      body: renderActions((terminal.prompt.options || []).map((option) => ({
         label: option,
-        action: "answerOption:" + option
-      })),
-      steps: interactiveSteps("option")
+        action: "answer:" + option
+      }))),
+      operatorMessage: "The flow is paused at a customer option prompt.",
+      steps: customerSteps("option")
     };
   }
 
-  if (demo.stage === "processing") {
+  if (terminal.stage === "admin-code") {
+    return {
+      status: "SERVICE",
+      eyebrow: "Operator access",
+      title: "Enter service code",
+      message: "Use 0000 in this simulator.",
+      activeSlot: "card",
+      body: renderAdminPad(),
+      operatorMessage: "Admin is hidden behind a local service path, not customer transaction buttons.",
+      steps: customerSteps("admin")
+    };
+  }
+
+  if (terminal.stage === "admin-menu") {
+    return {
+      status: "SERVICE",
+      eyebrow: "Operator menu",
+      title: "Terminal administration",
+      message: "Choose an operator function.",
+      activeSlot: "receipt",
+      body: renderActions([
+      { label: "Balance terminal", action: "adminRun:AdminBalanceTerminal" },
+      { label: "Cash adjustment", action: "adminRun:AdminCashAdjustment" },
+      { label: "Print totals", action: "adminRun:AdminPrintTotals" },
+        { label: "Exit service", action: "reset" }
+      ]),
+      operatorMessage: "Admin choices are still executed by the same running flow package.",
+      steps: customerSteps("admin")
+    };
+  }
+
+  if (terminal.stage === "processing") {
     return {
       status: "PROCESSING",
-      eyebrow: "Runtime executing flow",
-      title: "Please wait",
-      message: "The selected flow is talking to simulated host and device adapters.",
-      operatorMessage: "Running the real flow package through /api/session.",
-      activeSlot: selectedCashSlot(),
-      pinPad: false,
-      actions: [
-        { label: "Processing...", action: "none", disabled: true },
-        { label: "Do not remove card", action: "none", disabled: true }
-      ],
-      steps: interactiveSteps("processing")
+      eyebrow: "Please wait",
+      title: "Processing",
+      message: "The terminal is talking to simulated adapters and the flow runtime.",
+      activeSlot: "cash",
+      body: renderActions([{ label: "Processing...", action: "none", disabled: true }]),
+      operatorMessage: "Runtime session is active.",
+      steps: customerSteps("processing")
     };
   }
 
-  if (demo.stage === "cancelled") {
+  if (terminal.stage === "cancelled") {
     return {
       status: "CANCELLED",
       eyebrow: "Session ended",
       title: "Transaction cancelled",
-      message: "The simulated customer cancelled before the flow package executed.",
-      operatorMessage: "Press Reset terminal to start again.",
+      message: "Your card has been returned.",
       activeSlot: "card",
-      pinPad: false,
-      actions: [
-        { label: "Start again", action: "reset" },
-        { label: "Return card", action: "reset" }
-      ],
-      steps: interactiveSteps("cancelled")
+      body: renderActions([{ label: "Start again", action: "reset" }]),
+      operatorMessage: "Press Reset terminal to start again.",
+      steps: customerSteps("cancelled")
     };
   }
 
@@ -281,125 +346,216 @@ function interactiveScreen() {
     status: "WELCOME",
     eyebrow: "Idle screen",
     title: "Insert or tap card",
-    message: "Start a customer session from the terminal screen, not from a pre-finished result.",
-    operatorMessage: "Fault toggles remain configurable on the left before the flow executes.",
+    message: "Start a complete customer session from the ATM screen.",
     activeSlot: "card",
-    pinPad: false,
-    actions: [
+    body: renderActions([
       { label: "Insert card", action: "insertCard" },
-      { label: "Tap card", action: "insertCard" }
-    ],
-    steps: interactiveSteps("idle")
+      { label: "Tap card", action: "insertCard" },
+      { label: "Cardless access", action: "cardlessAccess" },
+      { label: "Operator access", action: "operatorAccess" }
+    ]),
+    operatorMessage: "Fault toggles remain outside the customer screen for simulator setup only.",
+    steps: customerSteps("idle")
   };
 }
 
-function interactiveSteps(stage) {
-  const done = (label, detail) => ({ label, detail, state: "done" });
-  const active = (label, detail) => ({ label, detail, state: "active" });
-  const skipped = (label, detail) => ({ label, detail, state: "skipped" });
-  const failed = (label, detail) => ({ label, detail, state: "failed" });
-
-  if (stage === "idle") {
-    return [
-      active("Insert or tap card", "Waiting for customer credential."),
-      skipped("Enter PIN", "PIN entry not reached."),
-      skipped("Select transaction", "Menu not displayed yet."),
-      skipped("Authorize and operate devices", "Runtime has not executed.")
-    ];
-  }
-  if (stage === "pin") {
-    return [
-      done("Insert or tap card", "Card accepted by the terminal."),
-      active("Enter PIN", demo.pin.length + "/4 digits entered."),
-      skipped("Select transaction", "Waiting for PIN completion."),
-      skipped("Authorize and operate devices", "Runtime has not executed.")
-    ];
-  }
-  if (stage === "select") {
-    return [
-      done("Insert or tap card", "Card accepted by the terminal."),
-      done("Enter PIN", "PIN accepted by simulator."),
-      active("Select transaction", formatTransaction(demo.selectedTransaction) + " highlighted."),
-      skipped("Authorize and operate devices", "Waiting for confirmation.")
-    ];
-  }
-  if (stage === "processing") {
-    return [
-      done("Insert or tap card", "Card accepted by the terminal."),
-      done("Enter PIN", "PIN accepted by simulator."),
-      done("Select transaction", formatTransaction(demo.selectedTransaction) + " selected."),
-      active("Authorize and operate devices", "Flow package is running.")
-    ];
-  }
-  if (stage === "option") {
-    return [
-      done("Insert or tap card", "Card accepted by the terminal."),
-      done("Enter PIN", "PIN accepted by simulator."),
-      skipped("Select transaction", "Waiting for customer option."),
-      active("Customer option", "Flow is paused at " + (demo.prompt?.screen || "option") + ".")
-    ];
-  }
-  return [
-    done("Insert or tap card", "Card accepted by the terminal."),
-    failed("Session cancelled", "Customer ended the session."),
-    skipped("Select transaction", "No transaction confirmed."),
-    skipped("Authorize and operate devices", "Runtime was not executed.")
-  ];
+function renderTransactionMenu() {
+  const options = terminal.prompt?.options || [];
+  const customerOptions = options.filter((option) => !option.startsWith("Admin"));
+  return renderActions([
+    ...customerOptions.map((option) => ({ label: transactionLabels[option] || formatTransaction(option), action: "answer:" + option })),
+    { label: "Operator access", action: "operatorAccess" }
+  ]);
 }
 
-function renderInteractiveActions(actions) {
+function renderAmountPrompt() {
+  const prompt = terminal.prompt || {};
+  const presets = prompt.presets || [];
+  const presetButtons = presets.map((amount) => ({
+    label: money(amount),
+    action: "answer:" + amount
+  }));
+  return renderActions(presetButtons) +
+    "<div class='amount-entry'>" +
+      "<strong>Custom amount</strong>" +
+      "<span>" + (terminal.customAmount ? money(Number(terminal.customAmount)) : "Enter amount") + "</span>" +
+    "</div>" +
+    renderNumberPad("amount");
+}
+
+function renderPinPad() {
+  return "<div class='secure-dots'>" + "*".repeat(terminal.pin.length).padEnd(4, "•") + "</div>" +
+    renderNumberPad("pin") +
+    renderActions([
+      { label: "Clear", action: "clearPin", disabled: terminal.pin.length === 0 },
+      { label: "Cancel", action: "cancel" }
+    ]);
+}
+
+function renderAdminPad() {
+  return "<div class='secure-dots'>" + "*".repeat(terminal.adminCode.length).padEnd(4, "•") + "</div>" +
+    renderNumberPad("admin") +
+    renderActions([
+      { label: "Clear", action: "clearAdmin", disabled: terminal.adminCode.length === 0 },
+      { label: "Cancel", action: "cancel" }
+    ]);
+}
+
+function renderNumberPad(mode) {
+  return "<div class='pin-pad'>" + ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "Enter"].map((key) =>
+    "<button class='pin-key' data-terminal-action='" + mode + ":" + key + "'>" + escapeHtml(key) + "</button>"
+  ).join("") + "</div>";
+}
+
+function renderResultActions(summary) {
+  if (summary.status === "failed") {
+    return renderActions([
+      { label: "Try again", action: "reset" },
+      { label: "Call operator", action: "operatorAccess" }
+    ]);
+  }
+  if (summary.status === "cancelled") {
+    return renderActions([{ label: "Start again", action: "reset" }]);
+  }
+  return renderActions([
+    { label: terminal.receiptPrinted ? "Receipt printed" : "Print receipt", action: "printReceipt", disabled: terminal.receiptPrinted },
+    { label: "Finish", action: "finish" }
+  ]);
+}
+
+function renderActions(actions) {
   return "<div class='atm-actions'>" + actions.map((action) =>
     "<button class='atm-action' data-terminal-action='" + escapeHtml(action.action) + "'" +
       (action.disabled ? " disabled" : "") + ">" + escapeHtml(action.label) + "</button>"
   ).join("") + "</div>";
 }
 
-function renderPinPad(show) {
-  if (!show) return "";
-  const keys = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "Enter"];
-  return "<div class='pin-pad'>" + keys.map((key) =>
-    "<button class='pin-key' data-terminal-action='pin:" + key + "'>" +
-      (key === "Enter" ? "Enter " + "*".repeat(demo.pin.length) : key) +
-    "</button>"
-  ).join("") + "</div>";
+function bindTerminalActions() {
+  document.querySelectorAll("[data-terminal-action]").forEach((button) => {
+    button.addEventListener("click", () => handleTerminalAction(button.getAttribute("data-terminal-action") || ""));
+  });
 }
 
 function handleTerminalAction(action) {
   if (action === "none") return;
-  if (action === "reset") return resetDemo();
+  if (action === "reset" || action === "finish") return resetTerminal();
+  if (action === "printReceipt") {
+    terminal.receiptPrinted = true;
+    if (terminal.result) renderResult(terminal.result);
+    return;
+  }
   if (action === "cancel") {
-    demo.stage = "cancelled";
-    renderInteractiveTerminal();
+    terminal.stage = "cancelled";
+    renderTerminal();
     return;
   }
   if (action === "insertCard") return startInteractiveRun();
+  if (action === "cardlessAccess") {
+    terminal.customerType = "TOUCH";
+    return startInteractiveRun();
+  }
+  if (action === "operatorAccess") {
+    terminal.adminCode = "";
+    terminal.stage = terminal.prompt?.kind === "transaction" ? "admin-code" : "admin-code";
+    renderTerminal();
+    return;
+  }
   if (action === "clearPin") {
-    demo.pin = "";
-    renderInteractiveTerminal();
+    terminal.pin = "";
+    renderTerminal();
     return;
   }
-  if (action.startsWith("pin:")) {
-    const key = action.slice(4);
-    if (key === "Enter") {
-      if (demo.pin.length >= 4) answerPrompt(demo.pin);
-      return;
-    }
-    if (demo.pin.length < 4) demo.pin += key;
-    if (demo.pin.length === 4) {
-      answerPrompt(demo.pin);
-      return;
-    }
-    renderInteractiveTerminal();
+  if (action === "clearAdmin") {
+    terminal.adminCode = "";
+    renderTerminal();
     return;
   }
-  if (action === "confirmTransaction") return answerPrompt(demo.selectedTransaction);
-  if (action.startsWith("answerOption:")) answerPrompt(action.slice("answerOption:".length));
+  if (action.startsWith("answer:")) return answerPrompt(action.slice("answer:".length));
+  if (action.startsWith("adminRun:")) {
+    const transaction = action.slice("adminRun:".length);
+    terminal.customerType = "OperatorAdmin";
+    if (terminal.prompt?.kind === "transaction") return answerPrompt(transaction);
+    terminal.pendingAdmin = transaction;
+    return startInteractiveRun();
+  }
+  if (action.startsWith("pin:")) return handlePinKey(action.slice(4));
+  if (action.startsWith("amount:")) return handleAmountKey(action.slice(7));
+  if (action.startsWith("admin:")) return handleAdminKey(action.slice(6));
 }
 
-function selectedCashSlot() {
-  if (demo.selectedTransaction === "CashWithdrawal" || demo.selectedTransaction === "FastCash") return "cash";
-  if (demo.selectedTransaction === "CashDeposit") return "cash";
-  return "receipt";
+function handlePinKey(key) {
+  if (key === "Enter") {
+    if (terminal.pin.length >= 4) answerPrompt(terminal.pin);
+    return;
+  }
+  if (terminal.pin.length < 4) terminal.pin += key;
+  if (terminal.pin.length === 4) return answerPrompt(terminal.pin);
+  renderTerminal();
+}
+
+function handleAmountKey(key) {
+  if (key === "Enter") {
+    if (Number(terminal.customAmount) > 0) answerPrompt(terminal.customAmount);
+    return;
+  }
+  if (terminal.customAmount.length < 5) terminal.customAmount += key;
+  renderTerminal();
+}
+
+function handleAdminKey(key) {
+  if (key === "Enter") {
+    if (terminal.adminCode === "0000") {
+      terminal.stage = "admin-menu";
+      terminal.customerType = "OperatorAdmin";
+      renderTerminal();
+    }
+    return;
+  }
+  if (terminal.adminCode.length < 4) terminal.adminCode += key;
+  if (terminal.adminCode === "0000") {
+    terminal.stage = "admin-menu";
+    terminal.customerType = "OperatorAdmin";
+  }
+  renderTerminal();
+}
+
+function customerSteps(stage) {
+  const done = (label, detail) => ({ label, detail, state: "done" });
+  const active = (label, detail) => ({ label, detail, state: "active" });
+  const skipped = (label, detail) => ({ label, detail, state: "skipped" });
+  const failed = (label, detail) => ({ label, detail, state: "failed" });
+
+  if (stage === "idle" || stage === "WELCOME") {
+    return [active("Insert or tap card", "Waiting for customer."), skipped("Enter PIN", "Not started."), skipped("Choose transaction", "Menu hidden.")];
+  }
+  if (stage === "pin" || stage === "PIN") {
+    return [done("Insert or tap card", "Card accepted."), active("Enter PIN", terminal.pin.length + "/4 digits."), skipped("Choose transaction", "Waiting for PIN.")];
+  }
+  if (stage === "transaction" || stage === "MENU") {
+    return [done("Insert or tap card", "Card accepted."), done("Enter PIN", "PIN accepted."), active("Choose transaction", "Main menu displayed.")];
+  }
+  if (stage === "account" || stage === "ACCOUNT") {
+    return [done("Choose transaction", "Transaction selected."), active("Select account", "Waiting for account.")];
+  }
+  if (stage === "amount" || stage === "AMOUNT") {
+    return [done("Select account", "Account selected."), active("Select amount", "Waiting for amount.")];
+  }
+  if (stage === "processing" || stage === "PROCESSING") {
+    return [done("Customer input", "Required choices captured."), active("Process transaction", "Adapters running.")];
+  }
+  if (stage === "cancelled" || stage === "CANCELLED") {
+    return [failed("Session cancelled", "Customer ended the session.")];
+  }
+  return [active("Continue", "Waiting for customer.")];
+}
+
+function renderTerminalSteps(steps) {
+  return "<div class='atm-progress'>" + steps.map((step) =>
+    "<div class='atm-step " + escapeHtml(step.state) + "'>" +
+      "<span class='dot'></span>" +
+      "<span><strong>" + escapeHtml(step.label) + "</strong>" + escapeHtml(step.detail) + "</span>" +
+    "</div>"
+  ).join("") + "</div>";
 }
 
 function renderShellSummary(summary) {
@@ -421,32 +577,6 @@ function renderManifest(manifest) {
     "<div class='chips'>" + (manifest.modules || []).map((moduleName) =>
       "<span class='chip'>" + escapeHtml(moduleName) + "</span>"
     ).join("") + "</div>";
-}
-
-function sideKeys() {
-  return "<div class='side-keys'><div class='side-key'></div><div class='side-key'></div><div class='side-key'></div><div class='side-key'></div></div>";
-}
-
-function renderAtmActions(summary) {
-  if (summary.status === "idle") {
-    return "<div class='atm-actions'><button class='atm-action'>Insert card</button><button class='atm-action'>Tap card</button></div>";
-  }
-  if (summary.status === "cancelled") {
-    return "<div class='atm-actions'><button class='atm-action'>Return card</button><button class='atm-action'>End session</button></div>";
-  }
-  if (summary.status === "failed") {
-    return "<div class='atm-actions'><button class='atm-action'>Try another transaction</button><button class='atm-action'>Call operator</button></div>";
-  }
-  return "<div class='atm-actions'><button class='atm-action'>Print receipt</button><button class='atm-action'>Finish</button></div>";
-}
-
-function renderTerminalSteps(steps) {
-  return "<div class='atm-progress'>" + steps.map((step) =>
-    "<div class='atm-step " + escapeHtml(step.state) + "'>" +
-      "<span class='dot'></span>" +
-      "<span><strong>" + escapeHtml(step.label) + "</strong>" + escapeHtml(step.detail) + "</span>" +
-    "</div>"
-  ).join("") + "</div>";
 }
 
 function renderHistory(history) {
@@ -485,6 +615,18 @@ function renderEvent(event) {
   "</article>";
 }
 
+function sideKeys() {
+  return "<div class='side-keys'><div class='side-key'></div><div class='side-key'></div><div class='side-key'></div><div class='side-key'></div></div>";
+}
+
+function slot(label, active) {
+  return "<div class='slot " + (active ? "active" : "") + "'>" + escapeHtml(label) + "</div>";
+}
+
+function detail(label, value) {
+  return "<div class='detail-row'><span>" + escapeHtml(label) + "</span><strong>" + escapeHtml(value) + "</strong></div>";
+}
+
 function metric(label, value) {
   return "<div class='metric'><span>" + label + "</span><strong>" + value + "</strong></div>";
 }
@@ -497,6 +639,10 @@ function statusLabel(status) {
 
 function formatTransaction(transaction) {
   return String(transaction || "Transaction").replace(/([a-z])([A-Z])/g, "$1 $2");
+}
+
+function money(amount) {
+  return "$" + Number(amount || 0).toLocaleString("en-US");
 }
 
 function escapeHtml(value) {

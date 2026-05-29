@@ -6,6 +6,9 @@ import manifest from "../../../examples/atm-basic/cashblocks.flow.json" with { t
 
 export type SimulationRequest = {
   transaction?: string;
+  customerType?: "OnUs" | "Local" | "TOUCH" | "OperatorAdmin" | "Unknown";
+  account?: string;
+  amount?: number;
   receiptPrinterOut?: boolean;
   hostDeclined?: boolean;
   dispenserOffline?: boolean;
@@ -19,6 +22,8 @@ export type SimulationSummary = {
   packageId: string;
   packageVersion: string;
   selectedTransaction?: string;
+  selectedAccount?: string;
+  selectedAmount?: number;
   status: "completed" | "failed" | "cancelled" | "idle";
   screenTitle: string;
   screenMessage: string;
@@ -64,6 +69,8 @@ export function getFlowManifest(): FlowPackage {
 export async function runSimulation(request: SimulationRequest = {}): Promise<SimulationResult> {
   const simulator: RuntimeSimulatorOptions = {
     customerSelections: [request.transaction ?? "BalanceInquiry"],
+    accountSelections: [request.account ?? "Checking"],
+    amountSelections: [request.amount ?? defaultAmount(request.transaction)],
     optionSelections: [request.receiptWarningAnswer ?? "YES"],
     receiptPrinter: request.receiptPrinterOut
       ? { health: "DEGRADED", paper: "OUT" }
@@ -77,7 +84,12 @@ export async function runSimulation(request: SimulationRequest = {}): Promise<Si
   const result = await runFlow(flow, {
     flowPackage,
     journalPath: request.journalPath,
-    simulator
+    simulator,
+    configure(globals) {
+      if (request.customerType) {
+        globals.Customer.CustomerType = request.customerType;
+      }
+    }
   });
   await result.runtime.Journal.flush();
 
@@ -91,6 +103,12 @@ export async function runSimulation(request: SimulationRequest = {}): Promise<Si
 
 export function summarizeEvents(events: RuntimeEvent[], flowOk = true): SimulationSummary {
   const selected = events.find((event) => event.type === "transaction.selected");
+  const account = events.find(
+    (event) => event.type === "transaction.detail_recorded" && event.payload?.detail === "account.selected"
+  );
+  const amount = events.find(
+    (event) => event.type === "transaction.detail_recorded" && event.payload?.detail === "amount.selected"
+  );
   const failed = events.find((event) => event.type === "transaction.failed");
   const completed = events.find((event) => event.type === "transaction.completed");
   const warning = events.find(
@@ -103,6 +121,10 @@ export function summarizeEvents(events: RuntimeEvent[], flowOk = true): Simulati
     typeof selected?.payload?.transaction === "string"
       ? selected.payload.transaction
       : undefined;
+  const selectedAccount =
+    typeof account?.payload?.account === "string" ? account.payload.account : undefined;
+  const selectedAmount =
+    typeof amount?.payload?.amount === "number" ? amount.payload.amount : undefined;
   const failureCode =
     typeof failed?.payload?.code === "string"
       ? failed.payload.code
@@ -119,6 +141,8 @@ export function summarizeEvents(events: RuntimeEvent[], flowOk = true): Simulati
   const terminalScreen = createTerminalScreen({
     status,
     selectedTransaction,
+    selectedAccount,
+    selectedAmount,
     failureCode,
     warningOffered: Boolean(warning),
     events
@@ -128,6 +152,8 @@ export function summarizeEvents(events: RuntimeEvent[], flowOk = true): Simulati
     packageId: flowPackage.id,
     packageVersion: flowPackage.version,
     selectedTransaction,
+    selectedAccount,
+    selectedAmount,
     status,
     screenTitle: terminalScreen.title,
     screenMessage: terminalScreen.message,
@@ -144,6 +170,8 @@ export function summarizeEvents(events: RuntimeEvent[], flowOk = true): Simulati
 function createTerminalScreen(input: {
   status: SimulationSummary["status"];
   selectedTransaction?: string;
+  selectedAccount?: string;
+  selectedAmount?: number;
   failureCode?: string;
   warningOffered: boolean;
   events: RuntimeEvent[];
@@ -151,9 +179,11 @@ function createTerminalScreen(input: {
   const steps = createTerminalSteps(input);
 
   if (input.status === "completed") {
+    const amount = input.selectedAmount ? ` ${input.selectedAmount}` : "";
+    const account = input.selectedAccount ? ` on ${input.selectedAccount}` : "";
     return {
       title: `${formatTransaction(input.selectedTransaction)} complete`,
-      message: "Thank you. Your transaction has finished successfully.",
+      message: `Thank you. Your transaction${amount}${account} has finished successfully.`,
       operatorMessage: "Flow completed without simulated device or host faults.",
       steps
     };
@@ -185,6 +215,8 @@ function createTerminalScreen(input: {
 function createTerminalSteps(input: {
   status: SimulationSummary["status"];
   selectedTransaction?: string;
+  selectedAccount?: string;
+  selectedAmount?: number;
   failureCode?: string;
   warningOffered: boolean;
   events: RuntimeEvent[];
@@ -195,6 +227,34 @@ function createTerminalSteps(input: {
   const hasHostRequest = input.events.some((event) => event.type === "host.authorization_requested");
   const hasHostResult = input.events.some((event) => event.type === "host.authorization_result");
   const hasTransaction = Boolean(input.selectedTransaction);
+  const isAdmin = input.selectedTransaction?.startsWith("Admin") ?? false;
+
+  if (isAdmin) {
+    return [
+      {
+        label: "Enter operator mode",
+        state: "done",
+        detail: "Operator session started."
+      },
+      {
+        label: "Select admin function",
+        state: hasTransaction ? "done" : "active",
+        detail: hasTransaction
+          ? `${formatTransaction(input.selectedTransaction)} selected.`
+          : "Waiting for operator selection."
+      },
+      {
+        label: "Run administrative operation",
+        state: input.status === "failed" ? "failed" : input.status === "completed" ? "done" : "active",
+        detail: operationDetail(input)
+      },
+      {
+        label: "Finish service session",
+        state: input.status === "completed" ? "done" : input.status === "failed" ? "failed" : "active",
+        detail: input.status === "completed" ? "Terminal can return to idle." : "Operator session is active."
+      }
+    ];
+  }
 
   return [
     {
@@ -339,6 +399,13 @@ function formatTransaction(transaction?: string): string {
   }
 
   return transaction.replace(/([a-z])([A-Z])/g, "$1 $2");
+}
+
+function defaultAmount(transaction?: string): number {
+  if (transaction === "CashDeposit") return 250;
+  if (transaction === "FastCash") return 100;
+  if (transaction === "CardlessWithdrawal") return 80;
+  return 100;
 }
 
 export async function readJournalHistory(journalPath?: string): Promise<JournalHistory> {

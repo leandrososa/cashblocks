@@ -11,9 +11,15 @@ test("returns the active flow manifest", () => {
 });
 
 test("runs a successful cash withdrawal simulation", async () => {
-  const result = await runSimulation({ transaction: "CashWithdrawal" });
+  const result = await runSimulation({
+    transaction: "CashWithdrawal",
+    account: "Savings",
+    amount: 200
+  });
 
   assert.equal(result.summary.selectedTransaction, "CashWithdrawal");
+  assert.equal(result.summary.selectedAccount, "Savings");
+  assert.equal(result.summary.selectedAmount, 200);
   assert.equal(result.summary.status, "completed");
   assert.equal(result.summary.screenTitle, "Cash Withdrawal complete");
   assert.deepEqual(
@@ -30,6 +36,25 @@ test("runs a successful cash withdrawal simulation", async () => {
   assert.equal(result.summary.terminalSteps.at(-1)?.state, "done");
   assert.equal(result.summary.completed, true);
   assert.equal(result.summary.failed, false);
+});
+
+test("runs operator admin without customer pin steps", async () => {
+  const result = await runSimulation({
+    transaction: "AdminPrintTotals",
+    customerType: "OperatorAdmin"
+  });
+
+  assert.equal(result.summary.selectedTransaction, "AdminPrintTotals");
+  assert.equal(result.summary.status, "completed");
+  assert.deepEqual(
+    result.summary.terminalSteps.map((step) => step.label),
+    [
+      "Enter operator mode",
+      "Select admin function",
+      "Run administrative operation",
+      "Finish service session"
+    ]
+  );
 });
 
 test("surfaces declined host simulations", async () => {

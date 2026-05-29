@@ -72,7 +72,10 @@ export default defineFlow(
         Customer.PinCheckChipProcessing = true;
       }
 
-      if (cardless) {
+      if (Customer.CustomerType === "OperatorAdmin") {
+        Customer.PinCheckEnabled = false;
+        Customer.PinCheckChipProcessing = false;
+      } else if (cardless) {
         Customer.PinCheckEnabled = false;
         Customer.PinCheckChipProcessing = false;
       } else {
@@ -103,6 +106,14 @@ export default defineFlow(
         Cashblocks.Log(`TRANSACTION SELECTED:${transaction}`);
 
         if (transaction === "CardlessWithdrawal") {
+          CoreSession.CurrentAccount = await Customer.SelectAccount(["Checking", "Savings"]);
+          CardlessCashWithdrawal.Amount = await Customer.SelectAmount({
+            prompt: "Select cardless withdrawal amount",
+            currencyCode: Cashblocks.GetProperty<string>("Currency.Code") ?? "AUD",
+            presets: [40, 80, 100, 200],
+            allowCustom: true
+          });
+          CoreSession.LastTransactionAmount = CardlessCashWithdrawal.Amount;
           Customer.TransactionSelected = "CardlessCashWithdrawal";
           CardlessCashWithdrawal.Authorization.PinlessAuthorizationEnabled = true;
           CardlessCashWithdrawal.Authorization.ChipAuthorizationRequired = false;
@@ -110,22 +121,40 @@ export default defineFlow(
           CardlessCashWithdrawal.Authorization.PinEntryOption = "Never";
           await CardlessCashWithdrawal.Execute();
         } else if (transaction === "CashWithdrawal") {
+          CoreSession.CurrentAccount = await Customer.SelectAccount(["Checking", "Savings", "Credit"]);
+          CashWithdrawal.Amount = await Customer.SelectAmount({
+            prompt: "Select withdrawal amount",
+            currencyCode: Cashblocks.GetProperty<string>("Currency.Code") ?? "AUD",
+            presets: [20, 50, 100, 200, 500],
+            allowCustom: true
+          });
+          CoreSession.LastTransactionAmount = CashWithdrawal.Amount;
           CashWithdrawal.Authorization.PinlessAuthorizationEnabled = false;
           CashWithdrawal.Authorization.ChipAuthorizationRequired = true;
           CashWithdrawal.Authorization.TransactionHost = "CoreHost";
           CashWithdrawal.Authorization.PinEntryOption = "ExceptFirst";
           await CashWithdrawal.Execute();
         } else if (transaction === "BalanceInquiry") {
+          CoreSession.CurrentAccount = await Customer.SelectAccount(["Checking", "Savings", "Credit"]);
           await BalanceInquiry.Execute();
         } else if (transaction === "CashDeposit") {
+          CoreSession.CurrentAccount = await Customer.SelectAccount(["Checking", "Savings"]);
+          CashDeposit.ExpectedAmount = await Customer.SelectAmount({
+            prompt: "Confirm deposit amount",
+            currencyCode: Cashblocks.GetProperty<string>("Currency.Code") ?? "AUD",
+            presets: [50, 100, 250, 500, 1000],
+            allowCustom: true
+          });
+          CoreSession.LastTransactionAmount = CashDeposit.ExpectedAmount;
           CashDeposit.Authorization.PinlessAuthorizationEnabled = false;
           CashDeposit.Authorization.ChipAuthorizationRequired = false;
           CashDeposit.Authorization.TransactionHost = "CoreHost";
           await CashDeposit.Execute();
         } else if (transaction === "FastCash") {
-          if (Cashblocks.ScratchPad.Contains("FastCashAmount")) {
-            FastCash.AmountSelector.AmountPreset = Number(Cashblocks.ScratchPad.Get("FastCashAmount"));
-          }
+          CoreSession.CurrentAccount = await Customer.SelectAccount(["Checking", "Savings"]);
+          FastCash.AmountSelector.AmountPreset = 100;
+          FastCash.Amount = FastCash.AmountSelector.AmountPreset;
+          CoreSession.LastTransactionAmount = FastCash.Amount;
           await FastCash.Execute();
         } else if (transaction === "AdminBalanceTerminal") {
           TerminalAdmin.PrepareBalance();

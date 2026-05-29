@@ -149,7 +149,12 @@ function startInteractiveSession(request: SimulationRequest): InteractiveSession
 
   session.resultPromise = runFlow(flow, {
     runtime,
-    flowPackage: manifest
+    flowPackage: manifest,
+    configure(globals) {
+      if (request.customerType) {
+        globals.Customer.CustomerType = request.customerType;
+      }
+    }
   }).then(async (result) => {
     await result.runtime.Journal.flush();
     session.result = result;
@@ -163,6 +168,8 @@ function startInteractiveSession(request: SimulationRequest): InteractiveSession
 function buildSimulatorOptions(request: SimulationRequest): RuntimeSimulatorOptions {
   return {
     customerSelections: [request.transaction ?? "BalanceInquiry"],
+    accountSelections: [request.account ?? "Checking"],
+    amountSelections: [request.amount ?? 100],
     optionSelections: [request.receiptWarningAnswer ?? "YES"],
     receiptPrinter: request.receiptPrinterOut
       ? { health: "DEGRADED", paper: "OUT" }
