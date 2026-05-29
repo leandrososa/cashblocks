@@ -349,11 +349,15 @@ function resultActions(summary) {
 
 function details(summary) {
   const rows = [
+    summary.adminOperation ? detail("Operation", formatAdminOperation(summary.adminOperation)) : "",
+    summary.cashAdjustment ? detail("Cash adjustment", summary.cashAdjustment) : "",
     summary.selectedAccount ? detail("Account", summary.selectedAccount) : "",
     summary.selectedAmount ? detail("Amount", money(summary.selectedAmount)) : "",
     summary.balanceBefore != null ? detail("Balance before", money(summary.balanceBefore)) : "",
     summary.balanceAfter != null ? detail("Balance after", money(summary.balanceAfter)) : "",
+    summary.terminalCashBefore != null ? detail("Terminal cash before", money(summary.terminalCashBefore)) : "",
     summary.terminalCashAfter != null ? detail("Terminal cash", money(summary.terminalCashAfter)) : "",
+    summary.accounts ? detail("Accounts", formatAccounts(summary.accounts)) : "",
     detail("Receipt", state.receiptPrinted ? "Printed" : "Not printed")
   ].filter(Boolean);
   return "<div class='details'>" + rows.join("") + "</div>";
@@ -377,6 +381,16 @@ function slot(label, active) {
 
 function money(amount) {
   return "$" + Number(amount || 0).toLocaleString("en-US");
+}
+
+function formatAccounts(accounts) {
+  return Object.entries(accounts)
+    .map(([account, balance]) => account + " " + money(balance))
+    .join(" · ");
+}
+
+function formatAdminOperation(operation) {
+  return String(operation).replaceAll("_", " ");
 }
 
 function escapeHtml(value) {

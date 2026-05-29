@@ -18,6 +18,10 @@ export type SimulationSummary = {
   selectedAmount?: number;
   balanceBefore?: number;
   balanceAfter?: number;
+  accounts?: Record<string, number>;
+  adminOperation?: string;
+  cashAdjustment?: string;
+  terminalCashBefore?: number;
   terminalCashAfter?: number;
   status: "completed" | "failed" | "cancelled" | "idle";
   screenTitle: string;
@@ -125,6 +129,20 @@ export function summarizeEvents(events: RuntimeEvent[], flowOk = true): Simulati
       : typeof completed?.payload?.terminalCash === "number"
         ? completed.payload.terminalCash
         : undefined;
+  const terminalCashBefore =
+    typeof completed?.payload?.terminalCashBefore === "number"
+      ? completed.payload.terminalCashBefore
+      : undefined;
+  const accounts =
+    completed?.payload?.accounts && typeof completed.payload.accounts === "object" && !Array.isArray(completed.payload.accounts)
+      ? Object.fromEntries(
+          Object.entries(completed.payload.accounts).filter((entry): entry is [string, number] => typeof entry[1] === "number")
+        )
+      : undefined;
+  const adminOperation =
+    typeof completed?.payload?.operation === "string" ? completed.payload.operation : undefined;
+  const cashAdjustment =
+    typeof completed?.payload?.cashAdjustment === "string" ? completed.payload.cashAdjustment : undefined;
   const failureCode =
     typeof failed?.payload?.code === "string"
       ? failed.payload.code
@@ -145,6 +163,10 @@ export function summarizeEvents(events: RuntimeEvent[], flowOk = true): Simulati
     selectedAmount,
     balanceBefore,
     balanceAfter,
+    accounts,
+    adminOperation,
+    cashAdjustment,
+    terminalCashBefore,
     terminalCashAfter,
     failureCode,
     warningOffered: Boolean(warning),
@@ -159,6 +181,10 @@ export function summarizeEvents(events: RuntimeEvent[], flowOk = true): Simulati
     selectedAmount,
     balanceBefore,
     balanceAfter,
+    accounts,
+    adminOperation,
+    cashAdjustment,
+    terminalCashBefore,
     terminalCashAfter,
     status,
     screenTitle: terminalScreen.title,
@@ -180,6 +206,10 @@ function createTerminalScreen(input: {
   selectedAmount?: number;
   balanceBefore?: number;
   balanceAfter?: number;
+  accounts?: Record<string, number>;
+  adminOperation?: string;
+  cashAdjustment?: string;
+  terminalCashBefore?: number;
   terminalCashAfter?: number;
   failureCode?: string;
   warningOffered: boolean;
@@ -188,6 +218,15 @@ function createTerminalScreen(input: {
   const steps = createTerminalSteps(input);
 
   if (input.status === "completed") {
+    if (input.selectedTransaction?.startsWith("Admin")) {
+      return {
+        title: `${formatTransaction(input.selectedTransaction)} complete`,
+        message: adminMessage(input),
+        operatorMessage: "Administrative operation completed against simulator state.",
+        steps
+      };
+    }
+
     const amount = input.selectedAmount ? ` ${input.selectedAmount}` : "";
     const account = input.selectedAccount ? ` on ${input.selectedAccount}` : "";
     const balance =
@@ -230,6 +269,10 @@ function createTerminalSteps(input: {
   selectedAmount?: number;
   balanceBefore?: number;
   balanceAfter?: number;
+  accounts?: Record<string, number>;
+  adminOperation?: string;
+  cashAdjustment?: string;
+  terminalCashBefore?: number;
   terminalCashAfter?: number;
   failureCode?: string;
   warningOffered: boolean;
@@ -343,6 +386,7 @@ function createTerminalSteps(input: {
 function operationDetail(input: {
   status: SimulationSummary["status"];
   selectedTransaction?: string;
+  cashAdjustment?: string;
   failureCode?: string;
 }): string {
   if (input.failureCode === "HOST_DECLINED") return "Host declined authorization.";
@@ -354,6 +398,9 @@ function operationDetail(input: {
   if (input.selectedTransaction === "CashWithdrawal") return "Authorization approved and cash dispensed.";
   if (input.selectedTransaction === "CashDeposit") return "Cash accepted by simulator.";
   if (input.selectedTransaction === "FastCash") return "Fast cash authorization and dispense completed.";
+  if (input.selectedTransaction === "AdminCashAdjustment" && input.cashAdjustment) {
+    return `Cash adjustment ${input.cashAdjustment} applied.`;
+  }
   if (input.selectedTransaction?.startsWith("Admin")) return "Administrative operation completed.";
 
   return input.status === "cancelled" ? "No device operation performed." : "No device action required.";
@@ -405,6 +452,29 @@ function failureScreen(
     operatorMessage: code ? `Failure code: ${code}.` : "Runtime reported an unknown failure.",
     steps
   };
+}
+
+function adminMessage(input: {
+  adminOperation?: string;
+  cashAdjustment?: string;
+  terminalCashBefore?: number;
+  terminalCashAfter?: number;
+  accounts?: Record<string, number>;
+}): string {
+  if (input.cashAdjustment && input.terminalCashAfter != null) {
+    const before = input.terminalCashBefore != null ? ` from ${input.terminalCashBefore}` : "";
+    return `Cash adjustment ${input.cashAdjustment} applied${before}. Terminal cash is now ${input.terminalCashAfter}.`;
+  }
+
+  if (input.terminalCashAfter != null) {
+    return `Terminal cash total is ${input.terminalCashAfter}.`;
+  }
+
+  if (input.accounts) {
+    return `Account totals available for ${Object.keys(input.accounts).join(", ")}.`;
+  }
+
+  return `Admin ${input.adminOperation ?? "operation"} completed.`;
 }
 
 function formatTransaction(transaction?: string): string {

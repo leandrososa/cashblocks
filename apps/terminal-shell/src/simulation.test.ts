@@ -75,6 +75,13 @@ test("runs operator admin without customer pin steps", async () => {
 
   assert.equal(result.summary.selectedTransaction, "AdminPrintTotals");
   assert.equal(result.summary.status, "completed");
+  assert.equal(result.summary.adminOperation, "subtotals");
+  assert.equal(result.summary.terminalCashAfter, 5000);
+  assert.deepEqual(result.summary.accounts, {
+    Checking: 1240,
+    Savings: 3850,
+    Credit: -320
+  });
   assert.deepEqual(
     result.summary.terminalSteps.map((step) => step.label),
     [
@@ -94,6 +101,9 @@ test("operator cash adjustment updates terminal cash", async () => {
 
   assert.equal(result.summary.selectedTransaction, "AdminCashAdjustment");
   assert.equal(result.summary.status, "completed");
+  assert.equal(result.summary.adminOperation, "cash_adjustment");
+  assert.equal(result.summary.cashAdjustment, "Add10");
+  assert.equal(result.summary.terminalCashBefore, 5000);
   assert.equal(result.summary.terminalCashAfter, 5010);
 });
 
