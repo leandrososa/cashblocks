@@ -1,22 +1,14 @@
 import { runFlow } from "../../../packages/flow-sdk/src/index.js";
 import type { FlowPackage, RuntimeEvent } from "../../../packages/runtime-contracts/src/index.js";
-import { JsonlJournalPersistence, type RuntimeSimulatorOptions } from "../../../packages/runtime-core/src/index.js";
+import { JsonlJournalPersistence } from "../../../packages/runtime-core/src/index.js";
+import {
+  buildSimulatorOptions,
+  type TerminalSessionRequest
+} from "../../../packages/terminal-session/src/index.js";
 import flow from "../../../examples/atm-basic/src/flow.js";
 import manifest from "../../../examples/atm-basic/cashblocks.flow.json" with { type: "json" };
 
-export type SimulationRequest = {
-  transaction?: string;
-  customerType?: "OnUs" | "Local" | "TOUCH" | "OperatorAdmin" | "Unknown";
-  account?: string;
-  amount?: number;
-  receiptPrinterOut?: boolean;
-  hostDeclined?: boolean;
-  dispenserOffline?: boolean;
-  acceptorOffline?: boolean;
-  cardReaderOffline?: boolean;
-  receiptWarningAnswer?: "YES" | "NO";
-  journalPath?: string;
-};
+export type SimulationRequest = TerminalSessionRequest;
 
 export type SimulationSummary = {
   packageId: string;
@@ -70,19 +62,10 @@ export function getFlowManifest(): FlowPackage {
 }
 
 export async function runSimulation(request: SimulationRequest = {}): Promise<SimulationResult> {
-  const simulator: RuntimeSimulatorOptions = {
-    customerSelections: [request.transaction ?? "BalanceInquiry"],
-    accountSelections: [request.account ?? "Checking"],
-    amountSelections: [request.amount ?? defaultAmount(request.transaction)],
-    optionSelections: [request.receiptWarningAnswer ?? "YES"],
-    receiptPrinter: request.receiptPrinterOut
-      ? { health: "DEGRADED", paper: "OUT" }
-      : { health: "HEALTHY", paper: "OK" },
-    hostApproved: !request.hostDeclined,
-    dispenserOnline: !request.dispenserOffline,
-    acceptorOnline: !request.acceptorOffline,
-    cardReaderOnline: !request.cardReaderOffline
-  };
+  const simulator = buildSimulatorOptions(
+    { ...request, amount: request.amount ?? defaultAmount(request.transaction) },
+    "BalanceInquiry"
+  );
 
   const result = await runFlow(flow, {
     flowPackage,

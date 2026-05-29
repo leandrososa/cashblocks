@@ -64,6 +64,7 @@ This writes JSONL journal events to `./data/demo.journal.jsonl`.
   adapters, append-only journal, and diagnostic logger implementations.
 - `packages/atm-modules`: reusable ATM transaction modules.
 - `packages/flow-sdk`: `defineFlow`, `runFlow`, and controlled runtime globals.
+- `packages/terminal-session`: shared paused-session runtime for browser apps.
 - `examples/atm-basic`: simulator-backed ATM flow package.
 - `apps/terminal-shell`: local browser shell for running and inspecting the demo.
 - `apps/customer-terminal`: full-screen customer-facing terminal simulation.

@@ -17,6 +17,11 @@ The runtime owns process-local state:
 Flow code receives a controlled `Cashblocks` API instead of direct access to
 hardware, files, processes, or networks.
 
+Browser apps use the shared terminal-session package to start a runtime session,
+pause at customer prompts, answer prompts, and summarize the resulting journal
+events. This keeps the developer shell and customer terminal on the same
+execution path.
+
 ## Flow Packages
 
 A flow package has a `cashblocks.flow.json` manifest and a TypeScript entrypoint.

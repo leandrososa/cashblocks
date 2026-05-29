@@ -2,14 +2,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { readFile } from "node:fs/promises";
 import { extname, join, normalize } from "node:path";
 
-import { runFlow } from "../../../packages/flow-sdk/src/index.js";
-import {
-  CashblocksRuntime,
-  QueuedCustomerInteraction,
-  RuntimeSimulator,
-  type PendingCustomerPrompt,
-  type RuntimeSimulatorOptions
-} from "../../../packages/runtime-core/src/index.js";
+import { TerminalSessionManager } from "../../../packages/terminal-session/src/index.js";
 import {
   getFlowManifest,
   readJournalHistory,
@@ -22,15 +15,12 @@ import manifest from "../../../examples/atm-basic/cashblocks.flow.json" with { t
 
 const port = Number(process.env.PORT ?? 4173);
 const publicDir = join(process.cwd(), "apps/terminal-shell/public");
-const interactiveSessions = new Map<string, InteractiveSession>();
-
-type InteractiveSession = {
-  id: string;
-  runtime: CashblocksRuntime;
-  interaction: QueuedCustomerInteraction;
-  result?: Awaited<ReturnType<typeof runFlow>>;
-  resultPromise: Promise<Awaited<ReturnType<typeof runFlow>>>;
-};
+const sessionManager = new TerminalSessionManager({
+  flow,
+  flowPackage: manifest,
+  summarizeEvents,
+  includeEvents: true
+});
 
 const server = createServer(async (request, response) => {
   try {
@@ -77,26 +67,26 @@ async function route(request: IncomingMessage, response: ServerResponse): Promis
 
   if (method === "POST" && url.pathname === "/api/session/start") {
     const body = await readJson<SimulationRequest>(request);
-    const session = startInteractiveSession({
+    const session = sessionManager.start({
       ...body,
       journalPath: process.env.CASHBLOCKS_JOURNAL_PATH
     });
-    writeJson(response, 200, await interactiveSessionState(session));
+    writeJson(response, 200, await sessionManager.state(session));
     return;
   }
 
   if (method === "POST" && url.pathname === "/api/session/answer") {
     const body = await readJson<{ sessionId: string; promptId: string; value: string }>(request);
-    const session = interactiveSessions.get(body.sessionId);
+    const session = sessionManager.get(body.sessionId);
     if (!session) {
       writeJson(response, 404, { error: "Interactive session not found." });
       return;
     }
-    if (!session.interaction.answer(body.promptId, body.value)) {
+    if (!sessionManager.answer(body)) {
       writeJson(response, 409, { error: "Prompt is no longer pending." });
       return;
     }
-    writeJson(response, 200, await interactiveSessionState(session));
+    writeJson(response, 200, await sessionManager.state(session));
     return;
   }
 
@@ -130,97 +120,6 @@ function contentType(filePath: string): string {
   if (extname(filePath) === ".css") return "text/css; charset=utf-8";
   if (extname(filePath) === ".js") return "text/javascript; charset=utf-8";
   return "application/octet-stream";
-}
-
-function startInteractiveSession(request: SimulationRequest): InteractiveSession {
-  const interaction = new QueuedCustomerInteraction();
-  const runtime = new CashblocksRuntime({
-    interaction,
-    simulator: new RuntimeSimulator(buildSimulatorOptions(request)),
-    journalPath: request.journalPath
-  });
-  const id = runtime.SessionId;
-  const session: InteractiveSession = {
-    id,
-    runtime,
-    interaction,
-    resultPromise: Promise.resolve(undefined as never)
-  };
-
-  session.resultPromise = runFlow(flow, {
-    runtime,
-    flowPackage: manifest,
-    configure(globals) {
-      if (request.customerType) {
-        globals.Customer.CustomerType = request.customerType;
-      }
-    }
-  }).then(async (result) => {
-    await result.runtime.Journal.flush();
-    session.result = result;
-    return result;
-  });
-  session.resultPromise.catch(() => undefined);
-  interactiveSessions.set(id, session);
-  return session;
-}
-
-function buildSimulatorOptions(request: SimulationRequest): RuntimeSimulatorOptions {
-  return {
-    customerSelections: [request.transaction ?? "BalanceInquiry"],
-    accountSelections: [request.account ?? "Checking"],
-    amountSelections: [request.amount ?? 100],
-    optionSelections: [request.receiptWarningAnswer ?? "YES"],
-    receiptPrinter: request.receiptPrinterOut
-      ? { health: "DEGRADED", paper: "OUT" }
-      : { health: "HEALTHY", paper: "OK" },
-    hostApproved: !request.hostDeclined,
-    dispenserOnline: !request.dispenserOffline,
-    acceptorOnline: !request.acceptorOffline,
-    cardReaderOnline: !request.cardReaderOffline
-  };
-}
-
-async function interactiveSessionState(session: InteractiveSession): Promise<Record<string, unknown>> {
-  await waitForPromptOrResult(session);
-  const events = session.runtime.Journal.all();
-  const ok = session.result?.ok ?? !events.some((event) => event.type === "flow.failed");
-
-  return {
-    sessionId: session.id,
-    prompt: serializePrompt(session.interaction.current()),
-    completed: Boolean(session.result),
-    manifest,
-    summary: summarizeEvents(events, ok),
-    events
-  };
-}
-
-async function waitForPromptOrResult(session: InteractiveSession): Promise<void> {
-  if (session.interaction.current() || session.result) {
-    return;
-  }
-
-  await Promise.race([
-    new Promise<void>((resolve) => {
-      const unsubscribe = session.interaction.onPrompt(() => {
-        unsubscribe();
-        resolve();
-      });
-    }),
-    session.resultPromise.then(() => undefined)
-  ]);
-}
-
-function serializePrompt(prompt?: PendingCustomerPrompt): Record<string, unknown> | undefined {
-  if (!prompt) {
-    return undefined;
-  }
-
-  return {
-    id: prompt.id,
-    ...prompt.prompt
-  };
 }
 
 function writeJson(response: ServerResponse, status: number, payload: unknown): void {

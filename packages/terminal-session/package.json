@@ -1,0 +1,7 @@
+{
+  "name": "@cashblocks/terminal-session",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "../../dist/packages/terminal-session/src/index.js",
+  "types": "../../dist/packages/terminal-session/src/index.d.ts"
+}
