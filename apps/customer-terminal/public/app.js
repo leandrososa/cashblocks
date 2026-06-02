@@ -100,7 +100,6 @@ function screen() {
       title: "Enter your PIN",
       message: "Use the keypad. This simulator accepts any four digits.",
       active: "card",
-      fdk: actionItems,
       body: secureDots(state.pin) + keypad("pin") + actions(actionItems)
     };
   }
@@ -117,7 +116,6 @@ function screen() {
       title: "Choose a transaction",
       message: "Select the service you want to perform.",
       active: "card",
-      fdk: actionItems,
       body: actions(actionItems)
     };
   }
@@ -130,7 +128,6 @@ function screen() {
       title: "Select account",
       message: "Choose which account to use.",
       active: "card",
-      fdk: actionItems,
       body: actions(actionItems)
     };
   }
@@ -144,7 +141,6 @@ function screen() {
       title: state.prompt?.prompt || "Select amount",
       message: "Choose a preset amount or enter a custom amount.",
       active: "cash",
-      fdk: actionItems,
       body: actions(actionItems) +
         "<div class='amount-entry'>" + (state.amount ? money(Number(state.amount)) : "Enter amount") + "</div>" +
         keypad("amount")
@@ -161,7 +157,6 @@ function screen() {
       title: isPrinterDown ? "Receipt unavailable" : isFastCashConfirm ? "Confirm fast cash" : state.prompt?.prompt || "Choose option",
       message: isFastCashConfirm ? "Fast cash will withdraw $100 from the selected account." : "Choose how to continue.",
       active: isFastCashConfirm ? "cash" : "receipt",
-      fdk: optionItems,
       body: actions(optionItems)
     };
   }
@@ -176,7 +171,6 @@ function screen() {
       title: "Enter service code",
       message: "Use 0000 in this simulator.",
       active: "card",
-      fdk: actionItems,
       body: secureDots(state.adminCode) + keypad("admin") + actions(actionItems)
     };
   }
@@ -194,7 +188,6 @@ function screen() {
       title: "Terminal administration",
       message: "Choose an operator function.",
       active: "receipt",
-      fdk: actionItems,
       body: actions(actionItems)
     };
   }
@@ -207,7 +200,6 @@ function screen() {
       title: "Processing",
       message: "The terminal is completing your request.",
       active: "cash",
-      fdk: actionItems,
       body: actions(actionItems)
     };
   }
@@ -221,7 +213,6 @@ function screen() {
       title: summary.screenTitle,
       message: summary.screenMessage,
       active: summary.selectedTransaction === "CashDeposit" ? "deposit" : "receipt",
-      fdk: actionItems,
       body: details(summary) + actions(actionItems)
     };
   }
@@ -238,15 +229,12 @@ function screen() {
     title: "Insert or tap card",
     message: "Start a complete Cashblocks ATM session.",
     active: "card",
-    fdk: actionItems,
     body: actions(actionItems)
   };
 }
 
 function frame(view) {
-  const fdk = view.fdk || [];
   return "<div class='terminal'>" +
-    sideKeys(fdk.slice(0, 4)) +
     "<section class='screen'>" +
       "<div class='topbar'><span>Cashblocks ATM</span><span>" + escapeHtml(view.status) + "</span></div>" +
       "<div class='content'>" +
@@ -262,7 +250,6 @@ function frame(view) {
         slot("Receipt", view.active === "receipt") +
       "</div>" +
     "</section>" +
-    sideKeys(fdk.slice(4, 8)) +
   "</div>";
 }
 
@@ -396,17 +383,6 @@ function secureDots(value) {
   return "<div class='secure'>" + "*".repeat(value.length).padEnd(4, "•") + "</div>";
 }
 
-function sideKeys(items) {
-  const padded = [...items];
-  while (padded.length < 4) padded.push(null);
-  return "<aside class='side'>" + padded.map((item) => {
-    if (!item) return "<button class='side-key empty' disabled></button>";
-    return "<button class='side-key' data-action='" + escapeHtml(item.action) + "'" +
-      (item.disabled ? " disabled" : "") +
-      " title='" + escapeHtml(item.label) + "'>" + escapeHtml(fdkLabel(item.label)) + "</button>";
-  }).join("") + "</aside>";
-}
-
 function slot(label, active) {
   return "<div class='slot " + (active ? "active" : "") + "'>" + escapeHtml(label) + "</div>";
 }
@@ -430,30 +406,6 @@ function formatOptionLabel(option) {
   if (option === "NO") return "Cancel";
   if (option === "Withdraw100") return "Withdraw $100";
   return option;
-}
-
-function fdkLabel(label) {
-  const text = String(label);
-  const map = {
-    "Insert card": "Insert",
-    "Tap card": "Tap",
-    "Cardless access": "Cardless",
-    "Operator access": "Operator",
-    "Cash withdrawal": "Withdraw",
-    "Balance inquiry": "Balance",
-    "Cash deposit": "Deposit",
-    "Fast cash": "Fast",
-    "Cardless withdrawal": "Cardless",
-    "Balance terminal": "Balance",
-    "Cash adjustment": "Cash adj.",
-    "Print totals": "Totals",
-    "Exit service": "Exit",
-    "Print receipt": "Print",
-    "Receipt printed": "Printed",
-    "Try again": "Retry",
-    "Withdraw $100": "$100"
-  };
-  return map[text] || text;
 }
 
 function escapeHtml(value) {
