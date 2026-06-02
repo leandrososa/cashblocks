@@ -25,6 +25,12 @@ test("runs a successful cash withdrawal simulation", async () => {
   assert.equal(result.summary.terminalCashAfter, 4800);
   assert.equal(result.summary.status, "completed");
   assert.equal(result.summary.screenTitle, "Cash Withdrawal complete");
+  assert.equal(
+    result.events.some(
+      (event) => event.type === "ui.prompt" && event.payload?.screen === "WithdrawalConfirm"
+    ),
+    true
+  );
   assert.deepEqual(
     result.summary.terminalSteps.map((step) => step.label),
     [
@@ -54,6 +60,12 @@ test("cash deposit credits the selected account and terminal cash", async () => 
   assert.equal(result.summary.balanceBefore, 1240);
   assert.equal(result.summary.balanceAfter, 1740);
   assert.equal(result.summary.terminalCashAfter, 5500);
+  assert.equal(
+    result.events.some(
+      (event) => event.type === "ui.prompt" && event.payload?.screen === "DepositInsertCash"
+    ),
+    true
+  );
 });
 
 test("fast cash reports the fixed amount after explicit confirmation", async () => {

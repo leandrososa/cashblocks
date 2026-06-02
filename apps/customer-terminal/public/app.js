@@ -20,7 +20,9 @@ const state = {
   amount: "",
   adminCode: "",
   receiptPrinted: false,
-  pendingAdminTransaction: ""
+  pendingAdminTransaction: "",
+  currentAccount: "",
+  currentAmount: 0
 };
 
 render();
@@ -38,6 +40,7 @@ async function startSession(options = {}) {
 
 async function answer(value) {
   if (!state.sessionId || !state.prompt) return;
+  rememberAnswer(value);
   state.stage = "processing";
   render();
   const response = await fetch("/api/session/answer", {
@@ -80,6 +83,18 @@ function applyState(next) {
   if (state.stage === "pin") state.pin = "";
   if (state.stage === "amount") state.amount = "";
   render();
+}
+
+function rememberAnswer(value) {
+  if (state.prompt?.kind === "transaction") {
+    state.currentAccount = "";
+    state.currentAmount = 0;
+  }
+  if (state.prompt?.kind === "account") state.currentAccount = value;
+  if (state.prompt?.kind === "amount") state.currentAmount = Number(value) || 0;
+  if (state.prompt?.kind === "option" && state.prompt.screen === "FastCashConfirm" && value === "Withdraw100") {
+    state.currentAmount = 100;
+  }
 }
 
 function render() {
@@ -149,15 +164,14 @@ function screen() {
 
   if (state.stage === "option") {
     const optionItems = (state.prompt?.options || []).map((option) => ({ label: formatOptionLabel(option), action: "answer:" + option }));
-    const isPrinterDown = state.prompt?.screen === "PrinterDown";
-    const isFastCashConfirm = state.prompt?.screen === "FastCashConfirm";
+    const optionView = optionScreenView(state.prompt?.screen);
     return {
       status: "OPTION",
-      eyebrow: "Decision",
-      title: isPrinterDown ? "Receipt unavailable" : isFastCashConfirm ? "Confirm fast cash" : state.prompt?.prompt || "Choose option",
-      message: isFastCashConfirm ? "Fast cash will withdraw $100 from the selected account." : "Choose how to continue.",
-      active: isFastCashConfirm ? "cash" : "receipt",
-      body: actions(optionItems)
+      eyebrow: optionView.eyebrow,
+      title: optionView.title,
+      message: optionView.message,
+      active: optionView.active,
+      body: optionContext(optionView) + actions(optionItems)
     };
   }
 
@@ -330,6 +344,8 @@ function reset() {
   state.adminCode = "";
   state.receiptPrinted = false;
   state.pendingAdminTransaction = "";
+  state.currentAccount = "";
+  state.currentAmount = 0;
   render();
 }
 
@@ -401,10 +417,106 @@ function formatAdminOperation(operation) {
   return String(operation).replaceAll("_", " ");
 }
 
+function optionScreenView(screen) {
+  const account = state.currentAccount || "selected account";
+  const amount = state.currentAmount ? money(state.currentAmount) : "the selected amount";
+
+  if (screen === "PrinterDown") {
+    return {
+      eyebrow: "Receipt printer",
+      title: "Receipt unavailable",
+      message: "The receipt printer is unavailable. Continue only if an on-screen result is enough.",
+      active: "receipt",
+      context: []
+    };
+  }
+
+  if (screen === "CardlessAccess") {
+    return {
+      eyebrow: "Cardless access",
+      title: "Enter withdrawal code",
+      message: "A production terminal would validate a one-time code or QR token. The simulator uses a pre-authorized code.",
+      active: "card",
+      context: [{ label: "Mode", value: "Cardless withdrawal" }]
+    };
+  }
+
+  if (screen === "WithdrawalConfirm" || screen === "CardlessWithdrawalConfirm") {
+    return {
+      eyebrow: "Confirm cash",
+      title: "Confirm withdrawal",
+      message: `Dispense ${amount} from ${account}.`,
+      active: "cash",
+      context: transactionContext()
+    };
+  }
+
+  if (screen === "FastCashConfirm") {
+    return {
+      eyebrow: "Confirm cash",
+      title: "Confirm fast cash",
+      message: `Fast cash will withdraw ${money(100)} from ${account}.`,
+      active: "cash",
+      context: [
+        { label: "Account", value: account },
+        { label: "Amount", value: money(100) }
+      ]
+    };
+  }
+
+  if (screen === "DepositInsertCash") {
+    return {
+      eyebrow: "Cash acceptor",
+      title: "Insert deposit cash",
+      message: `Insert ${amount} into the deposit slot, then confirm when the terminal has accepted the cash.`,
+      active: "deposit",
+      context: transactionContext()
+    };
+  }
+
+  if (screen === "BalanceDisplay") {
+    return {
+      eyebrow: "Balance inquiry",
+      title: "Choose balance delivery",
+      message: `Show the ${account} balance on screen or print it on a receipt.`,
+      active: "receipt",
+      context: [{ label: "Account", value: account }]
+    };
+  }
+
+  return {
+    eyebrow: "Decision",
+    title: state.prompt?.prompt || "Choose option",
+    message: "Choose how to continue.",
+    active: "receipt",
+    context: []
+  };
+}
+
+function transactionContext() {
+  return [
+    state.currentAccount ? { label: "Account", value: state.currentAccount } : null,
+    state.currentAmount ? { label: "Amount", value: money(state.currentAmount) } : null
+  ].filter(Boolean);
+}
+
+function optionContext(view) {
+  if (!view.context.length) return "";
+  return "<div class='context-panel'>" + view.context.map((item) =>
+    "<div><span>" + escapeHtml(item.label) + "</span><strong>" + escapeHtml(item.value) + "</strong></div>"
+  ).join("") + "</div>";
+}
+
 function formatOptionLabel(option) {
   if (option === "YES") return "Continue";
   if (option === "NO") return "Cancel";
+  if (option === "CANCEL") return "Cancel";
+  if (option === "Confirm") return "Confirm";
+  if (option === "Continue") return "Continue";
   if (option === "Withdraw100") return "Withdraw $100";
+  if (option === "CashInserted") return "Cash inserted";
+  if (option === "DisplayBalance") return "Show on screen";
+  if (option === "PrintReceipt") return "Print receipt";
   return option;
 }
 

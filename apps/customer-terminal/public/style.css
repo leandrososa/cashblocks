@@ -157,6 +157,36 @@ p {
   letter-spacing: 0;
 }
 
+.context-panel {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  width: min(100%, 720px);
+  margin-top: 28px;
+}
+
+.context-panel div {
+  display: grid;
+  gap: 6px;
+  min-height: 76px;
+  padding: 14px 16px;
+  border: 1px solid rgba(248,251,255,0.16);
+  border-radius: 8px;
+  background: rgba(0,0,0,0.22);
+}
+
+.context-panel span {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.context-panel strong {
+  color: var(--ink);
+  font-size: 24px;
+}
+
 .details {
   display: grid;
   gap: 10px;

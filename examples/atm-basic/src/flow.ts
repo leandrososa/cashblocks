@@ -106,6 +106,9 @@ export default defineFlow(
         Cashblocks.Log(`TRANSACTION SELECTED:${transaction}`);
 
         if (transaction === "CardlessWithdrawal") {
+          if ((await Customer.SelectOption("CardlessAccess", "Continue,Cancel")) === "Cancel") {
+            return;
+          }
           CoreSession.CurrentAccount = await Customer.SelectAccount(["Checking", "Savings"]);
           CardlessCashWithdrawal.Account = CoreSession.CurrentAccount;
           CardlessCashWithdrawal.Amount = await Customer.SelectAmount({
@@ -114,6 +117,9 @@ export default defineFlow(
             presets: [40, 80, 100, 200],
             allowCustom: true
           });
+          if ((await Customer.SelectOption("CardlessWithdrawalConfirm", "Confirm,CANCEL")) === "CANCEL") {
+            return;
+          }
           CoreSession.LastTransactionAmount = CardlessCashWithdrawal.Amount;
           Customer.TransactionSelected = "CardlessCashWithdrawal";
           CardlessCashWithdrawal.Authorization.PinlessAuthorizationEnabled = true;
@@ -130,6 +136,9 @@ export default defineFlow(
             presets: [20, 50, 100, 200, 500],
             allowCustom: true
           });
+          if ((await Customer.SelectOption("WithdrawalConfirm", "Confirm,CANCEL")) === "CANCEL") {
+            return;
+          }
           CoreSession.LastTransactionAmount = CashWithdrawal.Amount;
           CashWithdrawal.Authorization.PinlessAuthorizationEnabled = false;
           CashWithdrawal.Authorization.ChipAuthorizationRequired = true;
@@ -138,6 +147,9 @@ export default defineFlow(
           await CashWithdrawal.Execute();
         } else if (transaction === "BalanceInquiry") {
           CoreSession.CurrentAccount = await Customer.SelectAccount(["Checking", "Savings", "Credit"]);
+          if ((await Customer.SelectOption("BalanceDisplay", "DisplayBalance,PrintReceipt")) === "DisplayBalance") {
+            Cashblocks.ScratchPad.Set("DisplayBalance", true);
+          }
           BalanceInquiry.Account = CoreSession.CurrentAccount;
           await BalanceInquiry.Execute();
         } else if (transaction === "CashDeposit") {
@@ -149,6 +161,9 @@ export default defineFlow(
             presets: [50, 100, 250, 500, 1000],
             allowCustom: true
           });
+          if ((await Customer.SelectOption("DepositInsertCash", "CashInserted,CANCEL")) === "CANCEL") {
+            return;
+          }
           CoreSession.LastTransactionAmount = CashDeposit.ExpectedAmount;
           CashDeposit.Authorization.PinlessAuthorizationEnabled = false;
           CashDeposit.Authorization.ChipAuthorizationRequired = false;

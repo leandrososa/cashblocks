@@ -13,10 +13,19 @@ test("flow manifest is valid", () => {
 test("printer healthy balance inquiry does not force screen display", async () => {
   const result = await runFlow(flow, {
     flowPackage: manifest as FlowPackage,
-    simulator: { customerSelections: ["BalanceInquiry"] }
+    simulator: { customerSelections: ["BalanceInquiry"], optionSelections: ["PrintReceipt"] }
   });
 
   assert.equal(result.globals.BalanceInquiry.DisplayBalanceOnScreen, false);
+});
+
+test("balance inquiry can show balance on screen by customer choice", async () => {
+  const result = await runFlow(flow, {
+    flowPackage: manifest as FlowPackage,
+    simulator: { customerSelections: ["BalanceInquiry"], optionSelections: ["DisplayBalance"] }
+  });
+
+  assert.equal(result.globals.BalanceInquiry.DisplayBalanceOnScreen, true);
 });
 
 test("printer out balance inquiry forces screen display", async () => {
