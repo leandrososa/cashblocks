@@ -57,6 +57,8 @@ This writes JSONL journal events to `./data/demo.journal.jsonl`.
   the runtime journal.
 - [ISO8583 host adapter](docs/host-iso8583.md): transport-independent
   authorization codec/adapter and its deliberate production limits.
+- [Device gateway adapters](docs/device-gateway.md): transport-neutral adapters
+  for printers, dispensers, acceptors, and card readers.
 - [Industry context](docs/industry-context.md): where XFS, J/XFS, XFS4IoT, and
   ISO8583 fit.
 - [Roadmap](docs/roadmap.md): what exists, what is next, and what is outside the
@@ -72,6 +74,8 @@ This writes JSONL journal events to `./data/demo.journal.jsonl`.
 - `packages/flow-sdk`: `defineFlow`, `runFlow`, and controlled runtime globals.
 - `packages/terminal-session`: shared paused-session runtime for browser apps.
 - `packages/host-iso8583`: initial ISO8583 authorization codec and host adapter.
+- `packages/device-gateway`: adapters for an external device service or vendor
+  bridge.
 - `examples/atm-basic`: simulator-backed ATM flow package.
 - `apps/terminal-shell`: local browser shell for running and inspecting the demo.
 - `apps/customer-terminal`: full-screen customer-facing terminal simulation.

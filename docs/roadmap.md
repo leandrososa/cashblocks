@@ -26,6 +26,7 @@ flow architecture, and adapter boundaries.
 | Configurable diagnostic sinks and correlation conventions | Done |
 | Validated adapter identity, capabilities, and operation context | Done |
 | Transport-independent ISO8583 authorization adapter | Done |
+| Vendor-neutral device gateway adapters | Done |
 
 ## Next Priority
 
@@ -35,7 +36,7 @@ flow architecture, and adapter boundaries.
 
 | Area | Direction |
 | --- | --- |
-| Device integrations | XFS, J/XFS, XFS4IoT, or vendor adapters behind device contracts. |
+| Production device integration | Add a concrete XFS4IoT or vendor transport, recovery policy, drivers, and hardware certification. |
 | Production host integration | Add framing, security, reversals, durable STANs, and certification against a real host specification. |
 | Native packaging | Wrap the shell/runtime for local terminal environments. |
 | Replay tooling | Use durable journals to inspect and replay runtime sessions. |
