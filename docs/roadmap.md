@@ -29,18 +29,18 @@ flow architecture, and adapter boundaries.
 | Vendor-neutral device gateway adapters | Done |
 | Native customer-terminal executable packaging | Done |
 | Side-effect-free journal validation and replay | Done |
+| Deterministic certification and recovery harness | Done |
 
 ## Next Priority
 
 | Area | Goal |
 | --- | --- |
-| Certification support | Add deterministic recovery, audit, and conformance harnesses. |
+| Production device integration | Add a concrete XFS4IoT or vendor transport, recovery policy, drivers, and hardware certification. |
 
 ## Planned Later
 
 | Area | Direction |
 | --- | --- |
-| Production device integration | Add a concrete XFS4IoT or vendor transport, recovery policy, drivers, and hardware certification. |
 | Production host integration | Add framing, security, reversals, durable STANs, and certification against a real host specification. |
 
 ## Outside the MVP

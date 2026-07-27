@@ -20,6 +20,9 @@ Cashblocks separates stable terminal behavior from project-specific flow code.
   while keeping vendor APIs and transports out of flow packages.
 - `journal-replay` validates durable events and projects session state without
   re-executing external side effects.
+- `certification-harness` executes bounded conformance scenarios, validates
+  journal and financial invariants, classifies recovery, and emits reproducible
+  evidence digests.
 - `examples/atm-basic` demonstrates a financial ATM flow similar to legacy
   customer scripts.
 - `apps/terminal-shell` is the initial web shell for simulator inspection. It is

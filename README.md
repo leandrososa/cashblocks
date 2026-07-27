@@ -63,6 +63,8 @@ This writes JSONL journal events to `./data/demo.journal.jsonl`.
   into a local executable bundle with deployment-safe defaults.
 - [Journal replay](docs/journal-replay.md): validate durable JSONL and
   reconstruct side-effect-free session state.
+- [Certification harness](docs/certification-harness.md): run deterministic
+  conformance, recovery, financial-invariant, and audit-evidence checks.
 - [Industry context](docs/industry-context.md): where XFS, J/XFS, XFS4IoT, and
   ISO8583 fit.
 - [Roadmap](docs/roadmap.md): what exists, what is next, and what is outside the
@@ -82,6 +84,8 @@ This writes JSONL journal events to `./data/demo.journal.jsonl`.
   bridge.
 - `packages/journal-replay`: journal validation, state projection, and replay
   CLI.
+- `packages/certification-harness`: reusable conformance runner and the
+  simulator ATM certification profile.
 - `examples/atm-basic`: simulator-backed ATM flow package.
 - `apps/terminal-shell`: local browser shell for running and inspecting the demo.
 - `apps/customer-terminal`: full-screen customer-facing terminal simulation.
@@ -99,6 +103,7 @@ bun run customer
 bun run demo
 bun run package:native
 bun run replay -- ./data/runtime.journal.jsonl --pretty
+bun run certify -- --pretty
 ```
 
 Set `CASHBLOCKS_JOURNAL_PATH=./data/runtime.journal.jsonl` before `bun run dev`

@@ -391,6 +391,7 @@ export class CashWithdrawalModule extends AtmModule {
       return this.runtime.result(false, authorization.code, authorization.message);
     }
 
+    const terminalCashBefore = this.runtime.Simulator.terminalCash;
     const dispense = await callAdapter(
       this.runtime,
       "cashDispenser",
@@ -440,6 +441,7 @@ export class CashWithdrawalModule extends AtmModule {
         currencyCode,
         balanceBefore: balance.before,
         balanceAfter: balance.after,
+        terminalCashBefore,
         terminalCashAfter: this.runtime.Simulator.terminalCash
       }
     });
@@ -449,6 +451,7 @@ export class CashWithdrawalModule extends AtmModule {
       currencyCode,
       balanceBefore: balance.before,
       balanceAfter: balance.after,
+      terminalCashBefore,
       terminalCashAfter: this.runtime.Simulator.terminalCash
     });
   }
@@ -475,6 +478,7 @@ export class CashDepositModule extends AtmModule {
 
   async Execute(): Promise<TransactionResult> {
     const currencyCode = this.runtime.Cashblocks.GetProperty<string>("Currency.Code") ?? "AUD";
+    const terminalCashBefore = this.runtime.Simulator.terminalCash;
     const accepted = await callAdapter(
       this.runtime,
       "cashAcceptor",
@@ -514,6 +518,7 @@ export class CashDepositModule extends AtmModule {
         currencyCode,
         balanceBefore: balance.before,
         balanceAfter: balance.after,
+        terminalCashBefore,
         terminalCashAfter: this.runtime.Simulator.terminalCash
       }
     });
@@ -523,6 +528,7 @@ export class CashDepositModule extends AtmModule {
       currencyCode,
       balanceBefore: balance.before,
       balanceAfter: balance.after,
+      terminalCashBefore,
       terminalCashAfter: this.runtime.Simulator.terminalCash
     });
   }

@@ -27,6 +27,7 @@ test("runs a successful cash withdrawal simulation", async () => {
   assert.equal(result.summary.selectedAmount, 200);
   assert.equal(result.summary.balanceBefore, 3850);
   assert.equal(result.summary.balanceAfter, 3650);
+  assert.equal(result.summary.terminalCashBefore, 5000);
   assert.equal(result.summary.terminalCashAfter, 4800);
   assert.equal(result.summary.status, "completed");
   assert.equal(result.summary.screenTitle, "Cash Withdrawal complete");
@@ -64,6 +65,7 @@ test("cash deposit credits the selected account and terminal cash", async () => 
   assert.equal(result.summary.selectedAmount, 500);
   assert.equal(result.summary.balanceBefore, 1240);
   assert.equal(result.summary.balanceAfter, 1740);
+  assert.equal(result.summary.terminalCashBefore, 5000);
   assert.equal(result.summary.terminalCashAfter, 5500);
   assert.equal(
     result.events.some(
