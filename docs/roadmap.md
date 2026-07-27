@@ -23,12 +23,12 @@ flow architecture, and adapter boundaries.
 | API reference and cookbook | Done |
 | Cancellation, warning, and device-fault flow tests | Done |
 | Capability and cash-management simulator profiles | Done |
+| Configurable diagnostic sinks and correlation conventions | Done |
 
 ## Next Priority
 
 | Area | Goal |
 | --- | --- |
-| Observability | Add configurable diagnostic log sinks and correlation conventions. |
 | Adapter design | Refine contracts before real hardware integrations. |
 
 ## Planned Later

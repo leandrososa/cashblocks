@@ -43,12 +43,19 @@ export type RuntimeEventDraft = Omit<RuntimeEvent, "seq" | "ts"> & {
 
 export type DiagnosticLogLevel = "debug" | "info" | "warn" | "error";
 
+export type DiagnosticCorrelation = {
+  sessionId: string;
+  transactionId?: string;
+  transactionName?: string;
+};
+
 export type DiagnosticLogEntry = {
   level: DiagnosticLogLevel;
   ts: string;
   source: "runtime" | "flow" | "module" | "adapter" | "simulator" | "ui";
   message: string;
   sessionId?: string;
+  correlation?: DiagnosticCorrelation;
   error?: {
     name: string;
     message: string;

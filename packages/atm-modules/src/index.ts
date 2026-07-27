@@ -67,7 +67,8 @@ export class CustomerModule extends AtmModule {
       this.runtime,
       "cardReader",
       "readCard",
-      () => this.runtime.Adapters.cardReader.readCard()
+      () => this.runtime.Adapters.cardReader.readCard(),
+      { transaction: "CustomerIdentification" }
     );
 
     if (!cardRead.ok) {
@@ -555,6 +556,9 @@ async function callAdapter<T>(
       source: "adapter",
       message: `Adapter ${adapter}.${operation} threw an exception.`,
       error: diagnosticError(error),
+      ...(typeof metadata.transaction === "string"
+        ? { correlation: { transactionName: metadata.transaction } }
+        : {}),
       metadata: {
         adapter,
         operation,

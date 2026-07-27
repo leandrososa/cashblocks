@@ -46,6 +46,10 @@ If no logger is provided, the runtime uses `NoopDiagnosticLogger`.
 - `NoopDiagnosticLogger`
 - `ConsoleDiagnosticLogger`
 - `MemoryDiagnosticLogger`
+- `JsonlDiagnosticLogger`
+- `CompositeDiagnosticLogger`
+- `FilteredDiagnosticLogger`
+- `createDiagnosticLogger`
 
 Use `MemoryDiagnosticLogger` in tests:
 
@@ -58,10 +62,39 @@ const result = await runFlow(flow, {
 assert.equal(logger.all()[0]?.source, "flow");
 ```
 
+Compose and filter multiple sinks:
+
+```ts
+const file = new JsonlDiagnosticLogger("./data/diagnostics.jsonl");
+const memory = new MemoryDiagnosticLogger();
+const logger = createDiagnosticLogger({
+  minimumLevel: "warn",
+  sources: ["runtime", "flow", "adapter"],
+  sinks: [new ConsoleDiagnosticLogger(), file, memory]
+});
+
+const runtime = new CashblocksRuntime({ logger });
+
+// Before shutdown, wait for asynchronous JSONL writes.
+await file.flush();
+```
+
+Sink failures are isolated: a throwing sink cannot prevent delivery to later
+sinks or alter runtime behavior. `JsonlDiagnosticLogger.readAll()` is available
+for local inspection and tests.
+
 ## Correlation
 
-Log entries include `sessionId` when emitted through the runtime. Add metadata
-for adapter names, operations, transaction names, and other technical context.
+Log entries emitted through `CashblocksRuntime.logDiagnostic` use this
+convention:
+
+- `sessionId` remains at the top level for compatibility.
+- `correlation.sessionId` is always populated with the same value.
+- `correlation.transactionId` identifies one transaction when available.
+- `correlation.transactionName` identifies the module transaction type.
+
+Adapter exceptions automatically include the session id and transaction name.
+Add metadata for adapter names, operations, and other technical context.
 
 Do not put sensitive customer data such as PINs, PANs, or track data in
 diagnostic logs.

@@ -3,15 +3,20 @@ import test from "node:test";
 import { mkdtemp, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import type { DiagnosticLogEntry } from "../../runtime-contracts/src/index.js";
 
 import {
   CashblocksRuntime,
+  CompositeDiagnosticLogger,
+  ConsoleDiagnosticLogger,
   HandlerRegistry,
+  JsonlDiagnosticLogger,
   JsonlJournalPersistence,
   MemoryScratchPad,
   MemoryDiagnosticLogger,
   QueuedCustomerInteraction,
   RuntimeSimulator,
+  createDiagnosticLogger,
   createSimulatedAdapters,
   defineSimulatorProfile,
   type SimulatorProfile
@@ -74,6 +79,185 @@ test("memory diagnostic logger stores technical log entries", () => {
   assert.equal(logger.all().length, 1);
   assert.equal(logger.all()[0]?.sessionId, "diag");
   assert.equal(logger.all()[0]?.metadata?.component, "test");
+});
+
+test("memory diagnostic logger returns isolated snapshots", () => {
+  const logger = new MemoryDiagnosticLogger();
+  const runtime = new CashblocksRuntime({ logger });
+  runtime.logDiagnostic({
+    level: "info",
+    source: "runtime",
+    message: "original"
+  });
+
+  const returned = logger.all();
+  if (returned[0]) {
+    returned[0].message = "mutated";
+  }
+
+  assert.equal(logger.all()[0]?.message, "original");
+});
+
+test("configured diagnostic logger filters and isolates sinks", () => {
+  const memory = new MemoryDiagnosticLogger();
+  const mutatingSink = {
+    log(entry: DiagnosticLogEntry) {
+      entry.message = "mutated by sink";
+      if (entry.correlation) {
+        entry.correlation.transactionName = "MutatedTransaction";
+      }
+    }
+  };
+  const logger = createDiagnosticLogger({
+    minimumLevel: "warn",
+    sources: ["adapter"],
+    sinks: [
+      {
+        log() {
+          throw new Error("broken sink");
+        }
+      },
+      mutatingSink,
+      memory
+    ]
+  });
+  const runtime = new CashblocksRuntime({ sessionId: "observed-session", logger });
+
+  runtime.logDiagnostic({
+    level: "info",
+    source: "adapter",
+    message: "filtered by level"
+  });
+  runtime.logDiagnostic({
+    level: "error",
+    source: "flow",
+    message: "filtered by source"
+  });
+  runtime.logDiagnostic({
+    level: "error",
+    source: "adapter",
+    message: "delivered",
+    correlation: {
+      transactionId: "txn-7",
+      transactionName: "CashWithdrawal"
+    }
+  });
+
+  assert.equal(memory.all().length, 1);
+  assert.equal(memory.all()[0]?.message, "delivered");
+  assert.deepEqual(memory.all()[0]?.correlation, {
+    sessionId: "observed-session",
+    transactionId: "txn-7",
+    transactionName: "CashWithdrawal"
+  });
+});
+
+test("composite diagnostic logger isolates asynchronous sink rejection", async () => {
+  const memory = new MemoryDiagnosticLogger();
+  const logger = new CompositeDiagnosticLogger([
+    {
+      async log() {
+        throw new Error("asynchronous sink failure");
+      }
+    },
+    memory
+  ]);
+  const runtime = new CashblocksRuntime({ sessionId: "async-sink", logger });
+
+  runtime.logDiagnostic({
+    level: "error",
+    source: "runtime",
+    message: "still delivered"
+  });
+  await Promise.resolve();
+
+  assert.equal(memory.all()[0]?.message, "still delivered");
+});
+
+test("console diagnostic logger includes level and correlation", () => {
+  const logger = new ConsoleDiagnosticLogger();
+  const originalError = console.error;
+  let captured: unknown;
+  console.error = (output: unknown) => {
+    captured = output;
+  };
+
+  try {
+    logger.log({
+      ts: "2026-07-27T00:00:00.000Z",
+      level: "error",
+      source: "adapter",
+      sessionId: "console-session",
+      correlation: {
+        sessionId: "console-session",
+        transactionName: "CashWithdrawal"
+      },
+      message: "adapter failed"
+    });
+  } finally {
+    console.error = originalError;
+  }
+
+  assert.deepEqual(captured, {
+    ts: "2026-07-27T00:00:00.000Z",
+    level: "error",
+    source: "adapter",
+    sessionId: "console-session",
+    correlation: {
+      sessionId: "console-session",
+      transactionName: "CashWithdrawal"
+    },
+    message: "adapter failed",
+    metadata: undefined,
+    error: undefined
+  });
+});
+
+test("jsonl diagnostic logger persists structured correlated entries", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "cashblocks-diagnostics-"));
+  const path = join(dir, "diagnostics.jsonl");
+  const logger = new JsonlDiagnosticLogger(path);
+  const runtime = new CashblocksRuntime({ sessionId: "jsonl-session", logger });
+
+  runtime.logDiagnostic({
+    level: "warn",
+    source: "runtime",
+    message: "cash nearing threshold",
+    metadata: { terminalCash: 100 }
+  });
+  await logger.flush();
+
+  const entries = await logger.readAll();
+  assert.equal(entries.length, 1);
+  assert.equal(entries[0]?.sessionId, "jsonl-session");
+  assert.equal(entries[0]?.correlation?.sessionId, "jsonl-session");
+  assert.equal(entries[0]?.metadata?.terminalCash, 100);
+});
+
+test("jsonl diagnostic logger snapshots entries before queued writes", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "cashblocks-diagnostic-snapshot-"));
+  const logger = new JsonlDiagnosticLogger(join(dir, "diagnostics.jsonl"));
+  const entry: DiagnosticLogEntry = {
+    ts: "2026-07-27T00:00:00.000Z",
+    level: "info",
+    source: "runtime",
+    message: "original",
+    metadata: { state: "original" }
+  };
+
+  logger.log(entry);
+  entry.message = "changed after log";
+  entry.metadata = { state: "changed after log" };
+
+  const entries = await logger.readAll();
+  assert.equal(entries[0]?.message, "original");
+  assert.equal(entries[0]?.metadata?.state, "original");
+});
+
+test("jsonl diagnostic logger contains initialization failures until flush", async () => {
+  const logger = new JsonlDiagnosticLogger("invalid\u0000directory/diagnostics.jsonl");
+
+  await assert.rejects(() => logger.flush());
 });
 
 test("runtime can persist journal entries as jsonl", async () => {

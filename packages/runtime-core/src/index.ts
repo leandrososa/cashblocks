@@ -6,7 +6,9 @@ import type {
   CashAcceptorAdapter,
   CashDispenserAdapter,
   CardReaderAdapter,
+  DiagnosticCorrelation,
   DiagnosticLogEntry,
+  DiagnosticLogLevel,
   DiagnosticLogger,
   CustomerInteraction,
   CustomerPrompt,
@@ -105,8 +107,10 @@ export class ConsoleDiagnosticLogger implements DiagnosticLogger {
   log(entry: DiagnosticLogEntry): void {
     const output = {
       ts: entry.ts,
+      level: entry.level,
       source: entry.source,
       sessionId: entry.sessionId,
+      correlation: entry.correlation,
       message: entry.message,
       metadata: entry.metadata,
       error: entry.error
@@ -131,11 +135,141 @@ export class MemoryDiagnosticLogger implements DiagnosticLogger {
   private readonly entries: DiagnosticLogEntry[] = [];
 
   log(entry: DiagnosticLogEntry): void {
-    this.entries.push(entry);
+    this.entries.push(snapshotDiagnosticEntry(entry));
   }
 
   all(): DiagnosticLogEntry[] {
-    return [...this.entries];
+    return this.entries.map(snapshotDiagnosticEntry);
+  }
+}
+
+const diagnosticLevelRank: Record<DiagnosticLogLevel, number> = {
+  debug: 10,
+  info: 20,
+  warn: 30,
+  error: 40
+};
+
+export type DiagnosticLoggerConfiguration = {
+  sinks: DiagnosticLogger[];
+  minimumLevel?: DiagnosticLogLevel;
+  sources?: DiagnosticLogEntry["source"][];
+};
+
+export class CompositeDiagnosticLogger implements DiagnosticLogger {
+  constructor(private readonly sinks: DiagnosticLogger[]) {}
+
+  log(entry: DiagnosticLogEntry): void {
+    for (const sink of this.sinks) {
+      try {
+        const result = sink.log(snapshotDiagnosticEntry(entry)) as unknown;
+        ignoreAsyncDiagnosticFailure(result);
+      } catch {
+        // One diagnostic sink must not prevent delivery to the remaining sinks.
+      }
+    }
+  }
+}
+
+export class FilteredDiagnosticLogger implements DiagnosticLogger {
+  private readonly sources?: Set<DiagnosticLogEntry["source"]>;
+
+  constructor(
+    private readonly sink: DiagnosticLogger,
+    private readonly minimumLevel: DiagnosticLogLevel = "debug",
+    sources?: DiagnosticLogEntry["source"][]
+  ) {
+    this.sources = sources ? new Set(sources) : undefined;
+  }
+
+  log(entry: DiagnosticLogEntry): void {
+    if (diagnosticLevelRank[entry.level] < diagnosticLevelRank[this.minimumLevel]) {
+      return;
+    }
+    if (this.sources && !this.sources.has(entry.source)) {
+      return;
+    }
+    this.sink.log(snapshotDiagnosticEntry(entry));
+  }
+}
+
+export function createDiagnosticLogger(
+  configuration: DiagnosticLoggerConfiguration
+): DiagnosticLogger {
+  const composite = new CompositeDiagnosticLogger([...configuration.sinks]);
+  return new FilteredDiagnosticLogger(
+    composite,
+    configuration.minimumLevel,
+    configuration.sources
+  );
+}
+
+export class JsonlDiagnosticLogger implements DiagnosticLogger {
+  private readonly ready: Promise<void>;
+  private pending = Promise.resolve();
+  private writeError?: unknown;
+
+  constructor(private readonly filePath: string) {
+    this.ready = mkdir(dirname(filePath), { recursive: true }).then(
+      () => undefined,
+      (error: unknown) => {
+        this.writeError ??= error;
+      }
+    );
+  }
+
+  log(entry: DiagnosticLogEntry): void {
+    const snapshot = snapshotDiagnosticEntry(entry);
+    this.pending = this.pending.then(async () => {
+      try {
+        await this.ready;
+        if (this.writeError) {
+          return;
+        }
+        await appendFile(this.filePath, `${JSON.stringify(snapshot)}\n`, "utf8");
+      } catch (error) {
+        this.writeError ??= error;
+      }
+    });
+  }
+
+  async flush(): Promise<void> {
+    await this.ready;
+    await this.pending;
+    if (this.writeError) {
+      throw this.writeError;
+    }
+  }
+
+  async readAll(): Promise<DiagnosticLogEntry[]> {
+    await this.flush();
+    try {
+      const content = await readFile(this.filePath, "utf8");
+      return content
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => JSON.parse(line) as DiagnosticLogEntry);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        return [];
+      }
+      throw error;
+    }
+  }
+}
+
+function snapshotDiagnosticEntry(entry: DiagnosticLogEntry): DiagnosticLogEntry {
+  return structuredClone(entry);
+}
+
+function ignoreAsyncDiagnosticFailure(result: unknown): void {
+  if (
+    result !== null &&
+    (typeof result === "object" || typeof result === "function") &&
+    "then" in result &&
+    typeof result.then === "function"
+  ) {
+    void Promise.resolve(result as PromiseLike<unknown>).catch(() => undefined);
   }
 }
 
@@ -934,6 +1068,14 @@ export type CashblocksRuntimeOptions = {
   sessionId?: string;
 };
 
+export type DiagnosticLogInput = Omit<
+  DiagnosticLogEntry,
+  "ts" | "sessionId" | "correlation"
+> & {
+  sessionId?: string;
+  correlation?: Partial<DiagnosticCorrelation>;
+};
+
 export class CashblocksRuntime {
   readonly ScratchPad = new MemoryScratchPad();
   readonly Properties = new PropertyStore();
@@ -1013,12 +1155,18 @@ export class CashblocksRuntime {
     return details ? { ok, code, message, details } : { ok, code, message };
   }
 
-  logDiagnostic(entry: Omit<DiagnosticLogEntry, "ts" | "sessionId"> & { sessionId?: string }): void {
+  logDiagnostic(entry: DiagnosticLogInput): void {
     try {
+      const sessionId =
+        entry.correlation?.sessionId ?? entry.sessionId ?? this.SessionId;
       this.Logger.log({
         ...entry,
         ts: new Date().toISOString(),
-        sessionId: entry.sessionId ?? this.SessionId
+        sessionId,
+        correlation: {
+          ...entry.correlation,
+          sessionId
+        }
       });
     } catch {
       // Diagnostic logging must never change runtime behavior.

@@ -70,6 +70,8 @@ test("cash withdrawal logs diagnostic entries when an adapter throws", async () 
   assert.equal(entry?.level, "error");
   assert.equal(entry?.metadata?.adapter, "cashDispenser");
   assert.equal(entry?.error?.message, "vendor service crashed");
+  assert.equal(entry?.correlation?.sessionId, runtime.SessionId);
+  assert.equal(entry?.correlation?.transactionName, "CashWithdrawal");
 });
 
 test("customer pin entry fails when card reader is offline", async () => {
@@ -89,5 +91,30 @@ test("customer pin entry fails when card reader is offline", async () => {
         event.payload?.code === "CARD_READER_OFFLINE"
     ),
     true
+  );
+});
+
+test("card reader exceptions include customer identification correlation", async () => {
+  const logger = new MemoryDiagnosticLogger();
+  const runtime = new CashblocksRuntime({ logger });
+  const modules = createAtmModules(runtime);
+  runtime.Adapters.cardReader = {
+    id: "throwing-card-reader",
+    async readCard() {
+      throw new Error("reader service crashed");
+    }
+  };
+
+  await assert.rejects(
+    () => modules.Customer.PinEntry(),
+    /reader service crashed/
+  );
+
+  const entry = logger.all().find(
+    (log) => log.metadata?.adapter === "cardReader"
+  );
+  assert.equal(
+    entry?.correlation?.transactionName,
+    "CustomerIdentification"
   );
 });

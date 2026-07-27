@@ -137,6 +137,10 @@ cash, printer status, host approval, and device availability.
 - `NoopDiagnosticLogger`: discards entries.
 - `ConsoleDiagnosticLogger`: writes structured entries to the console.
 - `MemoryDiagnosticLogger`: retains entries for tests and inspection.
+- `JsonlDiagnosticLogger`: queues JSONL writes and exposes `flush`/`readAll`.
+- `CompositeDiagnosticLogger`: fans an entry out to isolated sinks.
+- `FilteredDiagnosticLogger`: filters by minimum level and source.
+- `createDiagnosticLogger`: builds a filtered composite from configuration.
 
 ### Supporting exports
 
