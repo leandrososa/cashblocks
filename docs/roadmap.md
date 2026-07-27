@@ -21,12 +21,12 @@ flow architecture, and adapter boundaries.
 | Simulator account balances and terminal cash | Done |
 | Introductory developer docs | Done |
 | API reference and cookbook | Done |
+| Cancellation, warning, and device-fault flow tests | Done |
 
 ## Next Priority
 
 | Area | Goal |
 | --- | --- |
-| Flow testing | Add more examples for cancellation, warnings, and device faults. |
 | Simulator profiles | Model richer device and cash-management capabilities without binding to vendors. |
 | Observability | Add configurable diagnostic log sinks and correlation conventions. |
 | Adapter design | Refine contracts before real hardware integrations. |
