@@ -14,6 +14,8 @@ Cashblocks separates stable terminal behavior from project-specific flow code.
 - `flow-sdk` binds a flow module to controlled runtime globals. Flow code can
   orchestrate modules but cannot directly access devices, filesystem, processes,
   or network.
+- `host-iso8583` implements a transport-independent authorization subset behind
+  `HostAuthorizationAdapter`.
 - `examples/atm-basic` demonstrates a financial ATM flow similar to legacy
   customer scripts.
 - `apps/terminal-shell` is the initial web shell for simulator inspection. It is

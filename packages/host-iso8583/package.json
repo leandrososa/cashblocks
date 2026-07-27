@@ -1,0 +1,7 @@
+{
+  "name": "@cashblocks/host-iso8583",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "../../dist/packages/host-iso8583/src/index.js",
+  "types": "../../dist/packages/host-iso8583/src/index.d.ts"
+}

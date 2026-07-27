@@ -55,6 +55,8 @@ This writes JSONL journal events to `./data/demo.journal.jsonl`.
   simulator boundaries, and hardware limits.
 - [Diagnostic logging](docs/diagnostic-logging.md): software logs separate from
   the runtime journal.
+- [ISO8583 host adapter](docs/host-iso8583.md): transport-independent
+  authorization codec/adapter and its deliberate production limits.
 - [Industry context](docs/industry-context.md): where XFS, J/XFS, XFS4IoT, and
   ISO8583 fit.
 - [Roadmap](docs/roadmap.md): what exists, what is next, and what is outside the
@@ -69,6 +71,7 @@ This writes JSONL journal events to `./data/demo.journal.jsonl`.
 - `packages/atm-modules`: reusable ATM transaction modules.
 - `packages/flow-sdk`: `defineFlow`, `runFlow`, and controlled runtime globals.
 - `packages/terminal-session`: shared paused-session runtime for browser apps.
+- `packages/host-iso8583`: initial ISO8583 authorization codec and host adapter.
 - `examples/atm-basic`: simulator-backed ATM flow package.
 - `apps/terminal-shell`: local browser shell for running and inspecting the demo.
 - `apps/customer-terminal`: full-screen customer-facing terminal simulation.
