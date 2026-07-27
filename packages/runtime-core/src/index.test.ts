@@ -3,7 +3,10 @@ import test from "node:test";
 import { mkdtemp, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import type { DiagnosticLogEntry } from "../../runtime-contracts/src/index.js";
+import type {
+  DiagnosticLogEntry,
+  TerminalAdapters
+} from "../../runtime-contracts/src/index.js";
 
 import {
   CashblocksRuntime,
@@ -51,6 +54,80 @@ test("runtime creates journal entries for logs", () => {
   runtime.Cashblocks.Log("hello");
 
   assert.equal(runtime.Journal.all().at(-1)?.payload?.message, "hello");
+});
+
+test("runtime rejects invalid adapter sets before startup", () => {
+  const simulator = new RuntimeSimulator();
+  const adapters = createSimulatedAdapters(simulator);
+  adapters.cashDispenser = {
+    id: adapters.receiptPrinter.id,
+    kind: "cash-dispenser",
+    capabilities: ["dispense"],
+    async dispense() {
+      return { ok: true, code: "DISPENSED", message: "Cash dispensed." };
+    }
+  };
+
+  assert.throws(
+    () => new CashblocksRuntime({ simulator, adapters }),
+    /Duplicate adapter id/
+  );
+
+  const unsupported = createSimulatedAdapters(simulator);
+  unsupported.cardReader = {
+    id: "unsupported-reader",
+    kind: "card-reader",
+    capabilities: ["invented"],
+    async readCard() {
+      return { ok: true, code: "CARD_READ", message: "Card read." };
+    }
+  };
+  assert.throws(
+    () => new CashblocksRuntime({ simulator, adapters: unsupported }),
+    /Unsupported card-reader capability: invented/
+  );
+
+  const malformed = {
+    ...createSimulatedAdapters(simulator),
+    cardReader: {
+      id: "missing-reader-operation",
+      kind: "card-reader",
+      capabilities: ["read"]
+    }
+  } as unknown as TerminalAdapters;
+  assert.throws(
+    () => new CashblocksRuntime({ simulator, adapters: malformed }),
+    /Required adapter operation missing: readCard/
+  );
+});
+
+test("runtime creates unique adapter operation contexts", () => {
+  const runtime = new CashblocksRuntime({
+    sessionId: "adapter-session",
+    adapterTimeoutMs: 12_000
+  });
+
+  const first = runtime.createAdapterOperationContext(
+    "simulated-card-reader",
+    "readCard",
+    "CustomerIdentification"
+  );
+  const second = runtime.createAdapterOperationContext(
+    "simulated-host-authorization",
+    "authorize",
+    "CashWithdrawal"
+  );
+
+  assert.equal(first.sessionId, "adapter-session");
+  assert.equal(first.timeoutMs, 12_000);
+  assert.equal(first.signal.aborted, false);
+  assert.equal(
+    Date.parse(first.deadlineAt) - Date.parse(first.startedAt),
+    12_000
+  );
+  assert.equal(first.transactionName, "CustomerIdentification");
+  assert.notEqual(first.operationId, second.operationId);
+  assert.equal(second.adapterId, "simulated-host-authorization");
 });
 
 test("runtime works without an explicit diagnostic logger", () => {

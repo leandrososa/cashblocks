@@ -59,6 +59,7 @@ export default defineFlow(
 
     async function OnIdle(): Promise<void> {
       await Idle.Execute();
+      await CoreSession.RefreshReceiptPrinterStatus();
       ReEnableMoreTime();
 
       const cardless = Customer.CustomerType === "TOUCH";

@@ -4,7 +4,12 @@ import { mkdtemp } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
-import { getFlowManifest, readJournalHistory, runSimulation } from "./simulation.js";
+import {
+  getFlowManifest,
+  readJournalHistory,
+  runSimulation,
+  summarizeEvents
+} from "./simulation.js";
 
 test("returns the active flow manifest", () => {
   assert.equal(getFlowManifest().id, "cashblocks.example.atm-basic");
@@ -350,4 +355,38 @@ test("reports unconfigured journal history", async () => {
 
   assert.equal(history.configured, false);
   assert.deepEqual(history.sessions, []);
+});
+
+test("surfaces reconciliation-required outcomes for operator review", () => {
+  const summary = summarizeEvents([
+    {
+      seq: 1,
+      ts: "2026-07-27T00:00:00.000Z",
+      type: "transaction.selected",
+      source: "ui",
+      sessionId: "reconcile-session",
+      payload: { transaction: "CashWithdrawal" }
+    },
+    {
+      seq: 2,
+      ts: "2026-07-27T00:00:01.000Z",
+      type: "transaction.reconciliation_required",
+      source: "module",
+      sessionId: "reconcile-session",
+      payload: {
+        transaction: "CashWithdrawal",
+        code: "ADAPTER_OUTCOME_UNKNOWN"
+      }
+    }
+  ]);
+
+  assert.equal(summary.status, "failed");
+  assert.equal(summary.failureCode, "ADAPTER_OUTCOME_UNKNOWN");
+  assert.equal(summary.screenTitle, "Operator review required");
+  assert.equal(
+    summary.terminalSteps.find(
+      (step) => step.label === "Authorize and operate devices"
+    )?.state,
+    "failed"
+  );
 });

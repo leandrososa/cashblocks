@@ -3,6 +3,7 @@ import { dirname } from "node:path";
 
 import type {
   AdapterResult,
+  AdapterOperationContext,
   CashAcceptorAdapter,
   CashDispenserAdapter,
   CardReaderAdapter,
@@ -26,6 +27,7 @@ import type {
   TerminalAdapters,
   TransactionResult
 } from "../../runtime-contracts/src/index.js";
+import { validateTerminalAdapters } from "../../runtime-contracts/src/index.js";
 
 export class MemoryScratchPad implements ScratchPad {
   private readonly values = new Map<string, JsonValue>();
@@ -882,6 +884,8 @@ function adapterResult(ok: boolean, code: string, message: string): AdapterResul
 
 export class SimulatedReceiptPrinterAdapter implements ReceiptPrinterAdapter {
   readonly id = "simulated-receipt-printer";
+  readonly kind = "receipt-printer" as const;
+  readonly capabilities = ["status", "print"] as const;
 
   constructor(private readonly simulator: RuntimeSimulator) {}
 
@@ -903,6 +907,8 @@ export class SimulatedReceiptPrinterAdapter implements ReceiptPrinterAdapter {
 
 export class SimulatedCashDispenserAdapter implements CashDispenserAdapter {
   readonly id = "simulated-cash-dispenser";
+  readonly kind = "cash-dispenser" as const;
+  readonly capabilities = ["dispense", "finite-inventory"] as const;
 
   constructor(private readonly simulator: RuntimeSimulator) {}
 
@@ -946,6 +952,8 @@ export class SimulatedCashDispenserAdapter implements CashDispenserAdapter {
 
 export class SimulatedCashAcceptorAdapter implements CashAcceptorAdapter {
   readonly id = "simulated-cash-acceptor";
+  readonly kind = "cash-acceptor" as const;
+  readonly capabilities = ["accept", "amount-confirmation"] as const;
 
   constructor(private readonly simulator: RuntimeSimulator) {}
 
@@ -998,6 +1006,8 @@ export class SimulatedCashAcceptorAdapter implements CashAcceptorAdapter {
 
 export class SimulatedCardReaderAdapter implements CardReaderAdapter {
   readonly id = "simulated-card-reader";
+  readonly kind = "card-reader" as const;
+  readonly capabilities = ["read"] as const;
 
   constructor(private readonly simulator: RuntimeSimulator) {}
 
@@ -1014,6 +1024,8 @@ export class SimulatedCardReaderAdapter implements CardReaderAdapter {
 
 export class SimulatedHostAuthorizationAdapter implements HostAuthorizationAdapter {
   readonly id = "simulated-host-authorization";
+  readonly kind = "host-authorization" as const;
+  readonly capabilities = ["authorize"] as const;
 
   constructor(private readonly simulator: RuntimeSimulator) {}
 
@@ -1066,6 +1078,7 @@ export type CashblocksRuntimeOptions = {
   logger?: DiagnosticLogger;
   journalPath?: string;
   sessionId?: string;
+  adapterTimeoutMs?: number;
 };
 
 export type DiagnosticLogInput = Omit<
@@ -1085,11 +1098,21 @@ export class CashblocksRuntime {
   readonly Interaction: CustomerInteraction;
   readonly Logger: DiagnosticLogger;
   readonly SessionId: string;
+  readonly AdapterTimeoutMs: number;
   readonly Cashblocks: RuntimeApi;
+  private adapterOperationSequence = 0;
 
   constructor(options: CashblocksRuntimeOptions = {}) {
     this.Simulator = options.simulator ?? new RuntimeSimulator();
     this.Adapters = options.adapters ?? createSimulatedAdapters(this.Simulator);
+    const adapterIssues = validateTerminalAdapters(this.Adapters);
+    if (adapterIssues.length > 0) {
+      throw new Error(
+        `Invalid terminal adapters: ${adapterIssues
+          .map((issue) => `${issue.field}: ${issue.message}`)
+          .join("; ")}`
+      );
+    }
     this.Interaction = options.interaction ?? new SimulatorCustomerInteraction(this.Simulator);
     this.Logger = options.logger ?? new NoopDiagnosticLogger();
     this.Journal = new RuntimeJournal({
@@ -1098,6 +1121,14 @@ export class CashblocksRuntime {
         : undefined
     });
     this.SessionId = options.sessionId ?? `session-${Date.now()}`;
+    this.AdapterTimeoutMs = options.adapterTimeoutMs ?? 30_000;
+    if (
+      !Number.isSafeInteger(this.AdapterTimeoutMs) ||
+      this.AdapterTimeoutMs <= 0 ||
+      this.AdapterTimeoutMs > 300_000
+    ) {
+      throw new Error("adapterTimeoutMs must be an integer between 1 and 300000.");
+    }
 
     this.Cashblocks = {
       ScratchPad: this.ScratchPad,
@@ -1153,6 +1184,27 @@ export class CashblocksRuntime {
     details?: Record<string, JsonValue>
   ): TransactionResult {
     return details ? { ok, code, message, details } : { ok, code, message };
+  }
+
+  createAdapterOperationContext(
+    adapterId: string,
+    operation: string,
+    transactionName?: string,
+    signal: AbortSignal = new AbortController().signal
+  ): AdapterOperationContext {
+    this.adapterOperationSequence += 1;
+    const startedAt = new Date();
+    return {
+      operationId: `${this.SessionId}:adapter:${this.adapterOperationSequence}`,
+      sessionId: this.SessionId,
+      adapterId,
+      operation,
+      ...(transactionName ? { transactionName } : {}),
+      timeoutMs: this.AdapterTimeoutMs,
+      startedAt: startedAt.toISOString(),
+      deadlineAt: new Date(startedAt.getTime() + this.AdapterTimeoutMs).toISOString(),
+      signal
+    };
   }
 
   logDiagnostic(entry: DiagnosticLogInput): void {

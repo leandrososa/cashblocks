@@ -122,6 +122,8 @@ import type { CashDispenserAdapter } from "@cashblocks/runtime-contracts";
 
 const cashDispenser: CashDispenserAdapter = {
   id: "example.dispenser",
+  kind: "cash-dispenser",
+  capabilities: ["dispense"],
   async dispense({ amount, currencyCode }) {
     if (amount <= 0) {
       return { ok: false, code: "INVALID_AMOUNT", message: "Amount must be positive." };

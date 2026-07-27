@@ -36,9 +36,10 @@ test("balance inquiry can show balance on screen by customer choice", async () =
 test("printer out balance inquiry forces screen display", async () => {
   const result = await runFlow(flow, {
     flowPackage: manifest as FlowPackage,
-    simulator: { customerSelections: ["BalanceInquiry"], optionSelections: ["YES"] },
-    configure(globals) {
-      globals.Cashblocks.SetProperty("Devices.ReceiptPrinter.StPaperStatus", "OUT");
+    simulator: {
+      customerSelections: ["BalanceInquiry"],
+      optionSelections: ["YES"],
+      receiptPrinter: { health: "DEGRADED", paper: "OUT" }
     }
   });
 

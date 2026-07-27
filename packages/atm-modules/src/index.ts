@@ -1,7 +1,11 @@
 import type {
+  AdapterResult,
+  AdapterOperationContext,
   AuthorizationConfig,
   CustomerType,
   JsonValue,
+  ReceiptPrinterStatus,
+  TerminalAdapters,
   TransactionResult
 } from "../../runtime-contracts/src/index.js";
 import { CashblocksRuntime, HandlerRegistry } from "../../runtime-core/src/index.js";
@@ -67,7 +71,8 @@ export class CustomerModule extends AtmModule {
       this.runtime,
       "cardReader",
       "readCard",
-      () => this.runtime.Adapters.cardReader.readCard(),
+      (context) => this.runtime.Adapters.cardReader.readCard(context),
+      adapterTimeoutResult,
       { transaction: "CustomerIdentification" }
     );
 
@@ -230,6 +235,41 @@ export class SessionModule {
     });
   }
 
+  async RefreshReceiptPrinterStatus(): Promise<ReceiptPrinterStatus> {
+    let status: ReceiptPrinterStatus;
+    try {
+      status = await callAdapter(
+        this.runtime,
+        "receiptPrinter",
+        "getStatus",
+        (context) => this.runtime.Adapters.receiptPrinter.getStatus(context),
+        (): ReceiptPrinterStatus => ({ health: "MISSING", paper: "OUT" }),
+        { transaction: "TerminalStatus" }
+      );
+    } catch (error) {
+      status = { health: "MISSING", paper: "OUT" };
+      this.runtime.Journal.append({
+        type: "device.status_changed",
+        source: "module",
+        sessionId: this.runtime.SessionId,
+        payload: {
+          adapter: "receiptPrinter",
+          code: "PRINTER_STATUS_ERROR",
+          message: error instanceof Error ? error.message : String(error)
+        }
+      });
+    }
+    this.runtime.Cashblocks.SetProperty(
+      "Devices.ReceiptPrinter.StDeviceStatus",
+      status.health
+    );
+    this.runtime.Cashblocks.SetProperty(
+      "Devices.ReceiptPrinter.StPaperStatus",
+      status.paper
+    );
+    return status;
+  }
+
   AnotherTransaction(): boolean {
     return false;
   }
@@ -259,6 +299,17 @@ export class BalanceInquiryModule extends AtmModule {
     });
 
     await this.handlers.emit("OnEndReceiptOption");
+
+    if (!this.DisplayBalanceOnScreen) {
+      const receipt = await printReceipt(this.runtime, this.Name, [
+        `Account: ${this.Account}`,
+        `Balance: ${this.runtime.Simulator.balance(this.Account)}`
+      ]);
+      if (!receipt.ok) {
+        this.DisplayBalanceOnScreen = true;
+        journalReceiptFailure(this.runtime, this.Name, receipt);
+      }
+    }
 
     this.runtime.Journal.append({
       type: "transaction.completed",
@@ -304,7 +355,7 @@ export class CashWithdrawalModule extends AtmModule {
       this.runtime,
       "hostAuthorization",
       "authorize",
-      () =>
+      (context) =>
         this.runtime.Adapters.hostAuthorization.authorize({
           transaction: this.Name,
           host: this.Authorization.TransactionHost,
@@ -313,7 +364,8 @@ export class CashWithdrawalModule extends AtmModule {
           currencyCode,
           pinless: this.Authorization.PinlessAuthorizationEnabled,
           chipRequired: this.Authorization.ChipAuthorizationRequired
-        }),
+        }, context),
+      adapterTimeoutResult,
       { transaction: this.Name, account: this.Account }
     );
 
@@ -343,17 +395,21 @@ export class CashWithdrawalModule extends AtmModule {
       this.runtime,
       "cashDispenser",
       "dispense",
-      () =>
+      (context) =>
         this.runtime.Adapters.cashDispenser.dispense({
           amount: this.Amount,
           currencyCode
-        }),
+        }, context),
+      adapterIndeterminateResult,
       { transaction: this.Name, amount: this.Amount, currencyCode }
     );
 
     if (!dispense.ok) {
       this.runtime.Journal.append({
-        type: "transaction.failed",
+        type:
+          dispense.code === "ADAPTER_OUTCOME_UNKNOWN"
+            ? "transaction.reconciliation_required"
+            : "transaction.failed",
         source: "module",
         sessionId: this.runtime.SessionId,
         payload: { transaction: this.Name, code: dispense.code }
@@ -364,6 +420,14 @@ export class CashWithdrawalModule extends AtmModule {
     const balance = this.runtime.Simulator.debit(this.Account, this.Amount);
 
     await this.handlers.emit("OnEndReceiptOption");
+    const receipt = await printReceipt(this.runtime, this.Name, [
+      `Transaction: ${this.Name}`,
+      `Account: ${this.Account}`,
+      `Amount: ${this.Amount} ${currencyCode}`
+    ]);
+    if (!receipt.ok) {
+      journalReceiptFailure(this.runtime, this.Name, receipt);
+    }
 
     this.runtime.Journal.append({
       type: "transaction.completed",
@@ -415,17 +479,21 @@ export class CashDepositModule extends AtmModule {
       this.runtime,
       "cashAcceptor",
       "accept",
-      () =>
+      (context) =>
         this.runtime.Adapters.cashAcceptor.accept({
           expectedAmount: this.ExpectedAmount || undefined,
           currencyCode
-        }),
+        }, context),
+      adapterIndeterminateResult,
       { transaction: this.Name, expectedAmount: this.ExpectedAmount || null, currencyCode }
     );
 
     if (!accepted.ok) {
       this.runtime.Journal.append({
-        type: "transaction.failed",
+        type:
+          accepted.code === "ADAPTER_OUTCOME_UNKNOWN"
+            ? "transaction.reconciliation_required"
+            : "transaction.failed",
         source: "module",
         sessionId: this.runtime.SessionId,
         payload: { transaction: this.Name, code: accepted.code }
@@ -543,30 +611,155 @@ export function createAtmModules(runtime: CashblocksRuntime): AtmModules {
 
 async function callAdapter<T>(
   runtime: CashblocksRuntime,
-  adapter: string,
+  adapter: keyof TerminalAdapters,
   operation: string,
-  call: () => Promise<T>,
+  call: (context: AdapterOperationContext) => Promise<T>,
+  onTimeout: (context: AdapterOperationContext) => T,
   metadata: Record<string, JsonValue> = {}
 ): Promise<T> {
+  const transactionName =
+    typeof metadata.transaction === "string" ? metadata.transaction : undefined;
+  const controller = new AbortController();
+  const context = runtime.createAdapterOperationContext(
+    runtime.Adapters[adapter].id,
+    operation,
+    transactionName,
+    controller.signal
+  );
+  let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
   try {
-    return await call();
+    return await new Promise<T>((resolve, reject) => {
+      let settled = false;
+      timeoutHandle = setTimeout(() => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        runtime.logDiagnostic({
+          level: "warn",
+          source: "adapter",
+          message: `Adapter ${adapter}.${operation} timed out.`,
+          ...(transactionName
+            ? { correlation: { transactionName } }
+            : {}),
+          metadata: {
+            adapter,
+            adapterId: context.adapterId,
+            operation,
+            operationId: context.operationId,
+            timeoutMs: context.timeoutMs
+          }
+        });
+        resolve(onTimeout(context));
+        queueMicrotask(() => controller.abort());
+      }, context.timeoutMs);
+      call(context).then(
+        (result) => {
+          if (!settled) {
+            settled = true;
+            resolve(result);
+          }
+        },
+        (error: unknown) => {
+          if (!settled) {
+            settled = true;
+            reject(error);
+          }
+        }
+      );
+    });
   } catch (error) {
     runtime.logDiagnostic({
       level: "error",
       source: "adapter",
       message: `Adapter ${adapter}.${operation} threw an exception.`,
       error: diagnosticError(error),
-      ...(typeof metadata.transaction === "string"
-        ? { correlation: { transactionName: metadata.transaction } }
+      ...(transactionName
+        ? { correlation: { transactionName } }
         : {}),
       metadata: {
         adapter,
+        adapterId: context.adapterId,
         operation,
+        operationId: context.operationId,
+        timeoutMs: context.timeoutMs,
         ...metadata
       }
     });
     throw error;
+  } finally {
+    if (timeoutHandle) {
+      clearTimeout(timeoutHandle);
+    }
   }
+}
+
+function adapterTimeoutResult(context: AdapterOperationContext): AdapterResult {
+  return {
+    ok: false,
+    code: "ADAPTER_TIMEOUT",
+    message: `Adapter operation ${context.operation} timed out.`,
+    details: {
+      adapterId: context.adapterId,
+      operationId: context.operationId,
+      timeoutMs: context.timeoutMs
+    }
+  };
+}
+
+function adapterIndeterminateResult(context: AdapterOperationContext): AdapterResult {
+  return {
+    ok: false,
+    code: "ADAPTER_OUTCOME_UNKNOWN",
+    message: `Adapter operation ${context.operation} timed out with an unknown outcome.`,
+    details: {
+      adapterId: context.adapterId,
+      operationId: context.operationId,
+      timeoutMs: context.timeoutMs,
+      requiresReconciliation: true
+    }
+  };
+}
+
+async function printReceipt(
+  runtime: CashblocksRuntime,
+  transaction: string,
+  lines: string[]
+): Promise<AdapterResult> {
+  try {
+    return await callAdapter(
+      runtime,
+      "receiptPrinter",
+      "printReceipt",
+      (context) => runtime.Adapters.receiptPrinter.printReceipt(lines, context),
+      adapterTimeoutResult,
+      { transaction }
+    );
+  } catch (error) {
+    return {
+      ok: false,
+      code: "RECEIPT_ERROR",
+      message: error instanceof Error ? error.message : String(error)
+    };
+  }
+}
+
+function journalReceiptFailure(
+  runtime: CashblocksRuntime,
+  transaction: string,
+  result: AdapterResult
+): void {
+  runtime.Journal.append({
+    type: "device.status_changed",
+    source: "module",
+    sessionId: runtime.SessionId,
+    payload: {
+      adapter: "receiptPrinter",
+      transaction,
+      code: result.code,
+      message: result.message
+    }
+  });
 }
 
 function diagnosticError(error: unknown): { name: string; message: string; stack?: string } {

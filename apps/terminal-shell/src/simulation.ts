@@ -101,12 +101,15 @@ export function summarizeEvents(events: RuntimeEvent[], flowOk = true): Simulati
     (event) => event.type === "transaction.detail_recorded" && event.payload?.detail === "amount.selected"
   );
   const cancelled = events.find((event) => event.type === "transaction.cancelled");
+  const reconciliation = events.find(
+    (event) => event.type === "transaction.reconciliation_required"
+  );
   const failed = events.find((event) => event.type === "transaction.failed");
   const completed = events.find((event) => event.type === "transaction.completed");
   const warning = events.find(
     (event) => event.type === "ui.prompt" && event.payload?.screen === "PrinterDown"
   );
-  const failedState = !flowOk || Boolean(failed);
+  const failedState = !flowOk || Boolean(failed) || Boolean(reconciliation);
   const completedState = Boolean(completed);
   const cancelledState = Boolean(cancelled);
   const selectedTransaction =
@@ -154,6 +157,8 @@ export function summarizeEvents(events: RuntimeEvent[], flowOk = true): Simulati
   const failureCode =
     typeof failed?.payload?.code === "string"
       ? failed.payload.code
+      : typeof reconciliation?.payload?.code === "string"
+        ? reconciliation.payload.code
       : !flowOk
         ? "FLOW_FAILED"
         : undefined;
@@ -410,6 +415,9 @@ function operationDetail(input: {
   if (input.failureCode === "DISPENSER_OFFLINE") return "Cash dispenser could not operate.";
   if (input.failureCode === "ACCEPTOR_OFFLINE") return "Cash acceptor could not operate.";
   if (input.failureCode === "CARD_READER_OFFLINE") return "Operation skipped after card reader failure.";
+  if (input.failureCode === "ADAPTER_OUTCOME_UNKNOWN") {
+    return "Device outcome is unknown and requires reconciliation.";
+  }
 
   if (input.selectedTransaction === "BalanceInquiry") return "Balance lookup completed in simulator.";
   if (input.selectedTransaction === "CashWithdrawal") return "Authorization approved and cash dispensed.";
@@ -475,6 +483,15 @@ function failureScreen(
       title: "Card reader unavailable",
       message: "This terminal cannot read cards right now.",
       operatorMessage: "Card reader adapter reported CARD_READER_OFFLINE.",
+      steps
+    };
+  }
+
+  if (code === "ADAPTER_OUTCOME_UNKNOWN") {
+    return {
+      title: "Operator review required",
+      message: "The device outcome could not be confirmed. Please contact an operator.",
+      operatorMessage: "Adapter timeout requires transaction reconciliation.",
       steps
     };
   }

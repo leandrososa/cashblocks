@@ -24,13 +24,12 @@ flow architecture, and adapter boundaries.
 | Cancellation, warning, and device-fault flow tests | Done |
 | Capability and cash-management simulator profiles | Done |
 | Configurable diagnostic sinks and correlation conventions | Done |
+| Validated adapter identity, capabilities, and operation context | Done |
 
 ## Next Priority
 
 | Area | Goal |
 | --- | --- |
-| Adapter design | Refine contracts before real hardware integrations. |
-
 ## Planned Later
 
 | Area | Direction |

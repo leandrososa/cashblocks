@@ -16,6 +16,13 @@ The first supported adapter set is:
 - `CardReaderAdapter`: reads card data before PIN entry or reports reader failures.
 - `HostAuthorizationAdapter`: approves or declines transaction authorization.
 
+All adapters declare an id, kind, and capability list. Runtime validation rejects
+duplicate ids or adapters wired into the wrong slot. Each operation receives an
+`AdapterOperationContext` with request correlation, deadline, and abort signal.
+The runtime enforces the timeout budget.
+Cash-movement timeouts are treated as indeterminate and require reconciliation;
+receipt failures remain best-effort after a financial transaction completes.
+
 `packages/runtime-core` ships simulator implementations for each contract. Real
 hardware or host integrations should implement the same interfaces and pass them
 to `new CashblocksRuntime({ adapters })`.
