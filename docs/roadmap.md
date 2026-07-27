@@ -27,6 +27,7 @@ flow architecture, and adapter boundaries.
 | Validated adapter identity, capabilities, and operation context | Done |
 | Transport-independent ISO8583 authorization adapter | Done |
 | Vendor-neutral device gateway adapters | Done |
+| Secure WebSocket device transport and recovery policy | Done |
 | Native customer-terminal executable packaging | Done |
 | Side-effect-free journal validation and replay | Done |
 | Deterministic certification and recovery harness | Done |
@@ -34,12 +35,6 @@ flow architecture, and adapter boundaries.
 ## Next Priority
 
 | Area | Goal |
-| --- | --- |
-| Production device integration | Add a concrete XFS4IoT or vendor transport, recovery policy, drivers, and hardware certification. |
-
-## Planned Later
-
-| Area | Direction |
 | --- | --- |
 | Production host integration | Add framing, security, reversals, durable STANs, and certification against a real host specification. |
 

@@ -117,8 +117,11 @@ export class DeviceGatewayClient {
         : undefined
     };
     const response = await this.transport.exchange(request, context);
-    context?.signal.throwIfAborted();
-    return parseGatewayResponse(response, requestId);
+    const parsed = parseGatewayResponse(response, requestId);
+    if (!isIndeterminatePostSendFailure(commandName, parsed)) {
+      context?.signal.throwIfAborted();
+    }
+    return parsed;
   }
 }
 
@@ -321,6 +324,27 @@ function parseGatewayResponse(
   };
 }
 
+function isIndeterminatePostSendFailure(
+  commandName: DeviceGatewayCommandName,
+  response: ParsedGatewayResponse
+): boolean {
+  if (response.ok || response.details?.requestSent !== true) return false;
+  if (commandName === "dispense" || commandName === "accept") {
+    return (
+      response.code === "ADAPTER_OUTCOME_UNKNOWN" &&
+      response.details.recovery === "manual_reconciliation" &&
+      response.details.requiresReconciliation === true
+    );
+  }
+  if (commandName === "printReceipt") {
+    return (
+      response.code === "DEVICE_OUTCOME_UNKNOWN" &&
+      response.details.recovery === "operator_review"
+    );
+  }
+  return false;
+}
+
 function validateBinding(binding: DeviceGatewayBinding, label: string): void {
   if (!binding.adapterId.trim()) {
     throw new Error(`${label} adapterId is required.`);
@@ -447,3 +471,5 @@ function defaultRequestId(): string {
   }
   return `device-${globalThis.crypto.randomUUID()}`;
 }
+
+export * from "./websocket.js";

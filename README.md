@@ -57,8 +57,8 @@ This writes JSONL journal events to `./data/demo.journal.jsonl`.
   the runtime journal.
 - [ISO8583 host adapter](docs/host-iso8583.md): transport-independent
   authorization codec/adapter and its deliberate production limits.
-- [Device gateway adapters](docs/device-gateway.md): transport-neutral adapters
-  for printers, dispensers, acceptors, and card readers.
+- [Device gateway adapters](docs/device-gateway.md): secure WebSocket device
+  transport and adapters for printers, dispensers, acceptors, and card readers.
 - [Native packaging](docs/native-packaging.md): compile the customer terminal
   into a local executable bundle with deployment-safe defaults.
 - [Journal replay](docs/journal-replay.md): validate durable JSONL and
@@ -80,8 +80,8 @@ This writes JSONL journal events to `./data/demo.journal.jsonl`.
 - `packages/flow-sdk`: `defineFlow`, `runFlow`, and controlled runtime globals.
 - `packages/terminal-session`: shared paused-session runtime for browser apps.
 - `packages/host-iso8583`: initial ISO8583 authorization codec and host adapter.
-- `packages/device-gateway`: adapters for an external device service or vendor
-  bridge.
+- `packages/device-gateway`: adapters plus a bounded WebSocket transport for an
+  external device service or vendor bridge.
 - `packages/journal-replay`: journal validation, state projection, and replay
   CLI.
 - `packages/certification-harness`: reusable conformance runner and the

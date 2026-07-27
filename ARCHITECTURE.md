@@ -17,7 +17,8 @@ Cashblocks separates stable terminal behavior from project-specific flow code.
 - `host-iso8583` implements a transport-independent authorization subset behind
   `HostAuthorizationAdapter`.
 - `device-gateway` maps runtime device contracts to an external device process
-  while keeping vendor APIs and transports out of flow packages.
+  over an isolated, secure WebSocket transport while keeping vendor APIs out of
+  flow packages.
 - `journal-replay` validates durable events and projects session state without
   re-executing external side effects.
 - `certification-harness` executes bounded conformance scenarios, validates

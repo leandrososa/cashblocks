@@ -5,10 +5,11 @@ external device process. It supplies adapters for receipt printers, cash
 dispensers, cash acceptors, and card readers without exposing transport or
 vendor APIs to flow packages.
 
-The injected transport can be implemented with WebSocket, local IPC, a vendor
-SDK bridge, XFS4IoT, or another protocol. Cashblocks owns request validation,
-correlation, cancellation, and response validation; the transport owns
-connection management and the translation to the target device API.
+The package includes a concrete WebSocket transport. A deployment-side service
+translates the Cashblocks wire contract to XFS4IoT, a vendor SDK, or another
+device API. Cashblocks owns request validation, correlation, cancellation,
+connection management, and response validation; the bridge owns device-specific
+translation.
 
 ## Wire Contract
 
@@ -101,10 +102,60 @@ Each binding can override them for an existing device process. Receipt text is
 data, not a raw printer-command channel: C0/C1 control characters are rejected
 before transport.
 
+## WebSocket Transport
+
+```ts
+import {
+  WebSocketDeviceGatewayTransport,
+  createDeviceGatewayAdapters
+} from "../packages/device-gateway/src/index.js";
+
+const transport = new WebSocketDeviceGatewayTransport({
+  url: "wss://127.0.0.1:9443/devices",
+  // Custom names extend the built-in dispense/accept policy.
+  indeterminateCommands: ["cash-out", "cash-in"]
+});
+
+const adapters = createDeviceGatewayAdapters({
+  transport,
+  bindings
+});
+```
+
+The transport uses one connection per operation, the
+`cashblocks.device.v1` WebSocket subprotocol, and text JSON frames. It rejects
+embedded URL credentials, fragments, oversized requests and responses,
+mismatched response IDs, expired deadlines, and non-text or invalid JSON
+responses. The server must negotiate one of the configured subprotocols before
+Cashblocks sends a request. `wss://` is required. `ws://` is available only for loopback
+development when `allowInsecureLoopback: true` is explicit.
+
+Request serialization is byte-budgeted before the complete string is built.
+The standard runtime WebSocket API exposes an incoming message only after its
+frame is materialized, so the built-in response limit detects and closes an
+oversized response but cannot prevent that initial allocation. Deployments that
+treat the bridge as untrusted should inject a WebSocket factory backed by a
+client with a native ingress limit; the factory receives `maxResponseBytes` as
+its third argument.
+
+Connection failures before `send()` are safe to retry. After a request is sent,
+the recovery result depends on effect risk:
+
+| Command class | Result |
+| --- | --- |
+| `dispense`, `accept`, or configured equivalent | `ADAPTER_OUTCOME_UNKNOWN`; manual reconciliation |
+| `print`, or configured non-idempotent command | `DEVICE_OUTCOME_UNKNOWN`; operator review |
+| Idempotent status/read command | `DEVICE_GATEWAY_UNAVAILABLE`; safe retry |
+| Invalid protocol response for an idempotent command | `DEVICE_OUTCOME_UNKNOWN`; operator review |
+
+The transport reports recovery metadata but never retries, reconciles, or
+reissues a command itself.
+
 ## Deployment Boundary
 
 This package is a production integration boundary, not a certified device
-service provider. A deployment still needs a transport implementation,
-device-specific command translation, recovery policy, vendor drivers, and
-hardware certification. Those concerns stay outside flow code and can evolve
-without changing transaction definitions.
+service provider. It supplies the network transport and recovery classification;
+a deployment still needs device-specific command translation, vendor drivers,
+mutual-authentication policy where required, and hardware certification. Those
+concerns stay outside flow code and can evolve without changing transaction
+definitions.
