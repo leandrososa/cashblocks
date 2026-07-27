@@ -61,6 +61,8 @@ This writes JSONL journal events to `./data/demo.journal.jsonl`.
   for printers, dispensers, acceptors, and card readers.
 - [Native packaging](docs/native-packaging.md): compile the customer terminal
   into a local executable bundle with deployment-safe defaults.
+- [Journal replay](docs/journal-replay.md): validate durable JSONL and
+  reconstruct side-effect-free session state.
 - [Industry context](docs/industry-context.md): where XFS, J/XFS, XFS4IoT, and
   ISO8583 fit.
 - [Roadmap](docs/roadmap.md): what exists, what is next, and what is outside the
@@ -78,6 +80,8 @@ This writes JSONL journal events to `./data/demo.journal.jsonl`.
 - `packages/host-iso8583`: initial ISO8583 authorization codec and host adapter.
 - `packages/device-gateway`: adapters for an external device service or vendor
   bridge.
+- `packages/journal-replay`: journal validation, state projection, and replay
+  CLI.
 - `examples/atm-basic`: simulator-backed ATM flow package.
 - `apps/terminal-shell`: local browser shell for running and inspecting the demo.
 - `apps/customer-terminal`: full-screen customer-facing terminal simulation.
@@ -94,6 +98,7 @@ bun run dev
 bun run customer
 bun run demo
 bun run package:native
+bun run replay -- ./data/runtime.journal.jsonl --pretty
 ```
 
 Set `CASHBLOCKS_JOURNAL_PATH=./data/runtime.journal.jsonl` before `bun run dev`

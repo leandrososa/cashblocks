@@ -28,12 +28,12 @@ flow architecture, and adapter boundaries.
 | Transport-independent ISO8583 authorization adapter | Done |
 | Vendor-neutral device gateway adapters | Done |
 | Native customer-terminal executable packaging | Done |
+| Side-effect-free journal validation and replay | Done |
 
 ## Next Priority
 
 | Area | Goal |
 | --- | --- |
-| Replay tooling | Inspect, validate, and replay durable journal sessions. |
 | Certification support | Add deterministic recovery, audit, and conformance harnesses. |
 
 ## Planned Later

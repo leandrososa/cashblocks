@@ -18,6 +18,8 @@ Cashblocks separates stable terminal behavior from project-specific flow code.
   `HostAuthorizationAdapter`.
 - `device-gateway` maps runtime device contracts to an external device process
   while keeping vendor APIs and transports out of flow packages.
+- `journal-replay` validates durable events and projects session state without
+  re-executing external side effects.
 - `examples/atm-basic` demonstrates a financial ATM flow similar to legacy
   customer scripts.
 - `apps/terminal-shell` is the initial web shell for simulator inspection. It is
