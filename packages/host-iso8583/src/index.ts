@@ -26,7 +26,7 @@ export type Iso8583HostAdapterOptions = {
   processingCodes?: Record<string, string>;
   responseCodeMap?: Record<string, HostResponseCategory>;
   now?: () => Date;
-  nextTrace?: () => number;
+  nextTrace?: () => number | Promise<number>;
 };
 
 export type HostResponseCategory =
@@ -125,7 +125,7 @@ export class Iso8583HostAuthorizationAdapter implements HostAuthorizationAdapter
   private readonly processingCodes: Record<string, string>;
   private readonly responseCodeMap: Record<string, HostResponseCategory>;
   private readonly now: () => Date;
-  private readonly nextTrace: () => number;
+  private readonly nextTrace: () => number | Promise<number>;
 
   constructor(options: Iso8583HostAdapterOptions) {
     this.id = options.id ?? "iso8583-host";
@@ -217,7 +217,7 @@ export class Iso8583HostAuthorizationAdapter implements HostAuthorizationAdapter
     context?: AdapterOperationContext
   ): Promise<AdapterResult> {
     context?.signal.throwIfAborted();
-    const requestMessage = this.createAuthorizationRequest(request);
+    const requestMessage = await this.createAuthorizationRequest(request);
     const requestPayload = encodeIso8583(requestMessage);
     const responsePayload = await this.transport.exchange(requestPayload, context);
     context?.signal.throwIfAborted();
@@ -285,9 +285,9 @@ export class Iso8583HostAuthorizationAdapter implements HostAuthorizationAdapter
     };
   }
 
-  private createAuthorizationRequest(
+  private async createAuthorizationRequest(
     request: HostAuthorizationRequest
-  ): Iso8583Message {
+  ): Promise<Iso8583Message> {
     const currencyCode = this.currencyNumericCodes[request.currencyCode];
     if (!currencyCode) {
       throw new Error(`No ISO8583 numeric code configured for ${request.currencyCode}.`);
@@ -297,7 +297,7 @@ export class Iso8583HostAuthorizationAdapter implements HostAuthorizationAdapter
       amount,
       this.minorUnitScales[request.currencyCode]
     );
-    const trace = this.nextTrace();
+    const trace = await this.nextTrace();
     if (!Number.isSafeInteger(trace) || trace < 1 || trace > 999_999) {
       throw new Error("ISO8583 trace must be between 1 and 999999.");
     }
@@ -325,6 +325,10 @@ export class Iso8583HostAuthorizationAdapter implements HostAuthorizationAdapter
     return code;
   }
 }
+
+export * from "./framed-transport.js";
+export * from "./stan-store.js";
+export * from "./reversal-store.js";
 
 function encodeField(field: Iso8583SupportedField, value: string): string {
   const spec = fieldSpecs[field];

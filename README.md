@@ -55,8 +55,8 @@ This writes JSONL journal events to `./data/demo.journal.jsonl`.
   simulator boundaries, and hardware limits.
 - [Diagnostic logging](docs/diagnostic-logging.md): software logs separate from
   the runtime journal.
-- [ISO8583 host adapter](docs/host-iso8583.md): transport-independent
-  authorization codec/adapter and its deliberate production limits.
+- [ISO8583 host adapter](docs/host-iso8583.md): authorization codec, framed TLS
+  transport, durable STAN allocation, and reversal-intent recovery.
 - [Device gateway adapters](docs/device-gateway.md): secure WebSocket device
   transport and adapters for printers, dispensers, acceptors, and card readers.
 - [Native packaging](docs/native-packaging.md): compile the customer terminal
@@ -79,7 +79,8 @@ This writes JSONL journal events to `./data/demo.journal.jsonl`.
 - `packages/atm-modules`: reusable ATM transaction modules.
 - `packages/flow-sdk`: `defineFlow`, `runFlow`, and controlled runtime globals.
 - `packages/terminal-session`: shared paused-session runtime for browser apps.
-- `packages/host-iso8583`: initial ISO8583 authorization codec and host adapter.
+- `packages/host-iso8583`: ISO8583 authorization adapter plus TLS framing,
+  durable STANs, and reversal recovery primitives.
 - `packages/device-gateway`: adapters plus a bounded WebSocket transport for an
   external device service or vendor bridge.
 - `packages/journal-replay`: journal validation, state projection, and replay

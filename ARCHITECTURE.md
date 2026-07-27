@@ -14,8 +14,8 @@ Cashblocks separates stable terminal behavior from project-specific flow code.
 - `flow-sdk` binds a flow module to controlled runtime globals. Flow code can
   orchestrate modules but cannot directly access devices, filesystem, processes,
   or network.
-- `host-iso8583` implements a transport-independent authorization subset behind
-  `HostAuthorizationAdapter`.
+- `host-iso8583` implements authorization plus framed TLS transport, durable
+  STAN allocation, and append-only reversal recovery behind the host boundary.
 - `device-gateway` maps runtime device contracts to an external device process
   over an isolated, secure WebSocket transport while keeping vendor APIs out of
   flow packages.

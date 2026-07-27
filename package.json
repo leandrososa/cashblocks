@@ -13,7 +13,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "bun test packages/runtime-core/src/index.test.ts packages/atm-modules/src/index.test.ts packages/flow-sdk/src/index.test.ts packages/host-iso8583/src/index.test.ts packages/device-gateway/src/index.test.ts packages/device-gateway/src/websocket.test.ts packages/journal-replay/src/index.test.ts packages/journal-replay/src/cli.test.ts packages/certification-harness/src/index.test.ts packages/certification-harness/src/cli.test.ts apps/customer-terminal/src/server.test.ts apps/native-terminal/src/config.test.ts apps/native-terminal/src/shutdown.test.ts apps/terminal-shell/src/simulation.test.ts examples/atm-basic/src/flow.test.ts",
+    "test": "bun test packages/runtime-core/src/index.test.ts packages/atm-modules/src/index.test.ts packages/flow-sdk/src/index.test.ts packages/host-iso8583/src/index.test.ts packages/host-iso8583/src/framed-transport.test.ts packages/host-iso8583/src/stan-store.test.ts packages/host-iso8583/src/reversal-store.test.ts packages/device-gateway/src/index.test.ts packages/device-gateway/src/websocket.test.ts packages/journal-replay/src/index.test.ts packages/journal-replay/src/cli.test.ts packages/certification-harness/src/index.test.ts packages/certification-harness/src/cli.test.ts apps/customer-terminal/src/server.test.ts apps/native-terminal/src/config.test.ts apps/native-terminal/src/shutdown.test.ts apps/terminal-shell/src/simulation.test.ts examples/atm-basic/src/flow.test.ts",
     "replay": "bun packages/journal-replay/src/cli.ts",
     "certify": "bun packages/certification-harness/src/cli.ts",
     "package:native": "bun run build && bun apps/native-terminal/src/package.ts",

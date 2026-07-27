@@ -26,24 +26,19 @@ flow architecture, and adapter boundaries.
 | Configurable diagnostic sinks and correlation conventions | Done |
 | Validated adapter identity, capabilities, and operation context | Done |
 | Transport-independent ISO8583 authorization adapter | Done |
+| TLS-framed host integration primitives, durable STANs, and reversal recovery | Done |
 | Vendor-neutral device gateway adapters | Done |
 | Secure WebSocket device transport and recovery policy | Done |
 | Native customer-terminal executable packaging | Done |
 | Side-effect-free journal validation and replay | Done |
 | Deterministic certification and recovery harness | Done |
 
-## Next Priority
-
-| Area | Goal |
-| --- | --- |
-| Production host integration | Add framing, security, reversals, durable STANs, and certification against a real host specification. |
-
 ## Outside the MVP
 
 | Area | Reason |
 | --- | --- |
 | Certification-grade XFS/J-XFS implementations | Requires hardware, vendor service providers, and deployment targets. |
-| Production ISO8583 host stack | Requires host specs, security requirements, keys, and network certification. |
+| Certified, host-specific ISO8583 stack | The transport and recovery primitives are present; field dictionaries, MACs, keys, host messages, and certification require an actual host specification. |
 | Vendor-specific behavior | Should wait for device profiles, docs, or real devices. |
 | Signed OS installers and kiosk lockdown | Require target operating systems, signing identities, and fleet policy. |
 | Full observability platform | The current goal is a minimal diagnostic logging boundary. |

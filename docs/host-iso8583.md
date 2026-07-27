@@ -1,8 +1,8 @@
 # ISO8583 Host Adapter
 
-`@cashblocks/host-iso8583` is an initial, transport-independent
-`HostAuthorizationAdapter`. It keeps ISO8583 encoding and response mapping behind
-the runtime host boundary so flow packages remain unchanged.
+`@cashblocks/host-iso8583` keeps ISO8583 encoding, response mapping, network
+framing, trace allocation, and reversal recovery behind the runtime host
+boundary so flow packages remain unchanged.
 
 ## Supported Message Subset
 
@@ -31,20 +31,32 @@ transport is called. Amounts are converted deterministically to minor units and
 rejected when they exceed the precision represented by that currency's entry
 in `minorUnitScales`.
 
-## Transport
+## Framed TLS Transport
 
-Network framing, TLS, connection management, and host-specific headers belong in
-an injected transport:
+The included transport opens one isolated connection per exchange and supports
+two- or four-byte big-endian length headers:
 
 ```ts
-const transport: Iso8583Transport = {
-  async exchange(message, context) {
-    return connection.request(message, {
-      signal: context?.signal,
-      deadlineAt: context?.deadlineAt
-    });
+import {
+  DurableStanAllocator,
+  FramedIso8583Transport
+} from "../packages/host-iso8583/src/index.js";
+
+const transport = new FramedIso8583Transport({
+  host: "switch.example.net",
+  port: 443,
+  tls: {
+    servername: "switch.example.net",
+    ca: trustedHostCa,
+    cert: terminalCertificate,
+    key: terminalPrivateKey,
+    minVersion: "TLSv1.3"
   }
-};
+});
+
+const stan = new DurableStanAllocator({
+  path: "./data/iso8583-stan.json"
+});
 
 const hostAuthorization = new Iso8583HostAuthorizationAdapter({
   terminalId: "ATM00001",
@@ -60,23 +72,76 @@ const hostAuthorization = new Iso8583HostAuthorizationAdapter({
   },
   responseCodeMap: {
     "91": "retryable"
-  }
+  },
+  nextTrace: () => stan.next()
 });
 ```
 
-Pass this adapter in the `hostAuthorization` slot of `TerminalAdapters`.
-Cashblocks supplies the operation context and enforces its timeout.
+TLS certificate verification is always enabled. Plain TCP is limited to an
+explicitly opted-in loopback connection for local testing. The transport bounds
+frames, rejects data trailing a complete frame in the same read and non-ASCII
+payloads, requires positive TLS authorization, and rechecks deadlines before
+send and response acceptance. Each exchange closes its connection after the
+first complete response, so bytes arriving after response acceptance are not
+reused by another request.
+
+The STAN allocator uses an exclusive lock and atomic state replacement, survives
+process restarts, serializes concurrent allocators, and wraps from `999999` to
+`000001`. It synchronizes the replacement file before rename and synchronizes
+the parent directory where the operating system supports directory `fsync`.
+Windows does not expose that operation through Node, so power-loss durability
+there depends on the selected filesystem and deployment policy. The adapter
+accepts either synchronous or asynchronous `nextTrace` providers.
+
+Lock files are never removed automatically because process liveness cannot be
+determined safely from file age. After a crash, an operator may remove a
+`*.lock` file only after verifying that no Cashblocks process is using the same
+state path.
+
+## Reversal Recovery
+
+`JsonlReversalStore` records non-sensitive reversal intentions and their
+attempt/completion lifecycle in append-only JSONL. `ReversalProcessor` drains a
+bounded batch through the configured transport:
+
+```ts
+const reversals = new JsonlReversalStore({
+  path: "./data/iso8583-reversals.jsonl"
+});
+
+const processor = new ReversalProcessor({
+  store: reversals,
+  transport,
+  buildMessage: (intent) => hostProfile.buildReversal(intent),
+  acceptResponse: (intent, response) =>
+    hostProfile.acceptsReversalResponse(intent, response)
+});
+```
+
+The store accepts an exact schema and persists identifiers, a bounded
+transaction code, trace, amount, currency, terminal, time, and a bounded reason
+code—not PAN, PIN, keys, arbitrary extra fields, or a raw authorization message.
+It serializes writers and processors across processes, synchronizes every
+appended event, repairs an incomplete final JSONL line after a crash, and bounds
+file bytes, records, events, and batch size. Failure messages are bounded and
+long digit sequences are redacted; callers must still avoid putting sensitive
+data in identifiers, reason codes, or thrown errors.
+
+The deployment-owned host profile builds and validates the actual reversal
+because MTI, original-data fields, MACs, and acknowledgement rules vary by host.
+As with STAN allocation, abandoned reversal lock files require operator
+recovery only after process liveness has been checked.
 
 ## Deliberate Limits
 
-This package is not a production ISO8583 switch implementation. It does not
-provide:
+This package provides production-readiness mechanisms, not a certified
+ISO8583 switch implementation. It does not provide:
 
 - binary field packing or secondary bitmaps
 - PAN/PIN capture or PIN blocks
 - MACs, key management, HSM integration, or encryption
-- reversals, advice, settlement, echo, or network management
-- TCP length headers, reconnect policy, or store-and-forward
+- a host-specific reversal message, advice, settlement, echo, or network management
+- automatic retries or an always-on connection pool
 - scheme- or host-specific field dictionaries
 
 Those require an actual host specification, security design, test keys, and
