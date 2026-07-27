@@ -81,6 +81,48 @@ This is not a banking ledger. It is a deterministic development model that makes
 the demo behave like a real terminal session and gives tests concrete state
 changes to assert.
 
+### Simulator Profiles
+
+`SimulatorProfile` describes terminal capabilities without naming a vendor. A
+profile defines the currency, supported devices, dispense and acceptance
+denominations, finite starting inventory, transaction limits, and whether
+accepted cash is recycled into dispense inventory.
+
+Use `defineSimulatorProfile` to validate and clone configuration before passing
+it to `RuntimeSimulator`:
+
+```ts
+const profile = defineSimulatorProfile({
+  id: "branch.compact",
+  currencyCode: "AUD",
+  capabilities: {
+    receiptPrinter: true,
+    cashDispenser: true,
+    cashAcceptor: false,
+    cardReader: true,
+    hostAuthorization: true
+  },
+  cashManagement: {
+    dispenseDenominations: [20, 50],
+    acceptDenominations: [20, 50],
+    initialInventory: { "20": 20, "50": 20 },
+    maxDispenseAmount: 500,
+    maxDepositAmount: 2000,
+    recycleDeposits: false
+  }
+});
+
+const simulator = new RuntimeSimulator({ profile });
+```
+
+The default profile preserves the original demo behavior with AUD 5,000 in
+finite cash units. Supplying the legacy `terminalCash` option without a profile
+keeps scalar cash behavior for backward compatibility. A profile and
+`terminalCash` cannot be supplied together because profile inventory is the
+single source of truth. Profile limits are capped at 100,000 currency units,
+each cash-unit count at 10,000, and each denomination list at 32 values so
+denomination allocation remains deterministic and computationally bounded.
+
 ## Journal vs Diagnostic Logs
 
 The journal is the audit-style event stream. It records what happened in the

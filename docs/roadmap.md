@@ -22,12 +22,12 @@ flow architecture, and adapter boundaries.
 | Introductory developer docs | Done |
 | API reference and cookbook | Done |
 | Cancellation, warning, and device-fault flow tests | Done |
+| Capability and cash-management simulator profiles | Done |
 
 ## Next Priority
 
 | Area | Goal |
 | --- | --- |
-| Simulator profiles | Model richer device and cash-management capabilities without binding to vendors. |
 | Observability | Add configurable diagnostic log sinks and correlation conventions. |
 | Adapter design | Refine contracts before real hardware integrations. |
 

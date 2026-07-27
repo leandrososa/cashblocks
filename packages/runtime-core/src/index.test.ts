@@ -10,7 +10,11 @@ import {
   JsonlJournalPersistence,
   MemoryScratchPad,
   MemoryDiagnosticLogger,
-  QueuedCustomerInteraction
+  QueuedCustomerInteraction,
+  RuntimeSimulator,
+  createSimulatedAdapters,
+  defineSimulatorProfile,
+  type SimulatorProfile
 } from "./index.js";
 
 test("scratchpad stores, reads, and removes values", () => {
@@ -102,3 +106,289 @@ test("queued customer interaction waits for an external answer", async () => {
   assert.equal(interaction.answer(prompt?.id ?? "", "CashWithdrawal"), true);
   assert.deepEqual(await answerPromise, { value: "CashWithdrawal" });
 });
+
+test("simulator profile validates cash management configuration", () => {
+  assert.throws(
+    () =>
+      defineSimulatorProfile({
+        ...cashProfile(),
+        cashManagement: {
+          ...cashProfile().cashManagement,
+          initialInventory: { "20": 1, "25": 1 }
+        }
+      }),
+    /inventory denomination 25 is not dispensable/
+  );
+  assert.throws(
+    () =>
+      defineSimulatorProfile({
+        ...cashProfile(),
+        cashManagement: {
+          ...cashProfile().cashManagement,
+          initialInventory: { "50": 1 }
+        }
+      }),
+    /inventory must include denomination 20/
+  );
+  assert.throws(
+    () =>
+      defineSimulatorProfile({
+        ...cashProfile(),
+        cashManagement: {
+          ...cashProfile().cashManagement,
+          initialInventory: { "020": 1, "50": 1 }
+        }
+      }),
+    /inventory key 020 must be canonical/
+  );
+  assert.throws(
+    () =>
+      defineSimulatorProfile({
+        ...cashProfile(),
+        cashManagement: {
+          ...cashProfile().cashManagement,
+          initialInventory: {
+            "20": Number.MAX_SAFE_INTEGER + 1,
+            "50": 1
+          }
+        }
+      }),
+    /must be between 0 and 10000/
+  );
+  assert.throws(
+    () =>
+      defineSimulatorProfile({
+        ...cashProfile(),
+        cashManagement: {
+          ...cashProfile().cashManagement,
+          acceptDenominations: [10, 20, 50]
+        }
+      }),
+    /recycled accept denominations must also be dispensable/
+  );
+  assert.throws(
+    () =>
+      new RuntimeSimulator({
+        profile: cashProfile(),
+        terminalCash: 1000
+    }),
+    /cannot combine profile with terminalCash/
+  );
+  const tooManyDenominations = Array.from({ length: 33 }, (_, index) => index + 1);
+  assert.throws(
+    () =>
+      defineSimulatorProfile({
+        ...cashProfile(),
+        cashManagement: {
+          ...cashProfile().cashManagement,
+          dispenseDenominations: tooManyDenominations,
+          initialInventory: Object.fromEntries(
+            tooManyDenominations.map((denomination) => [String(denomination), 0])
+          )
+        }
+      }),
+    /must contain at most 32 values/
+  );
+});
+
+test("simulator profile dispenses from finite denomination inventory", async () => {
+  const simulator = new RuntimeSimulator({ profile: cashProfile() });
+  const dispenser = createSimulatedAdapters(simulator).cashDispenser;
+
+  assert.equal(simulator.terminalCash, 120);
+
+  const dispensed = await dispenser.dispense({
+    amount: 70,
+    currencyCode: "AUD"
+  });
+
+  assert.equal(dispensed.ok, true);
+  assert.equal(simulator.terminalCash, 50);
+  assert.deepEqual(simulator.cashInventorySnapshot(), {
+    "20": 0,
+    "50": 1
+  });
+
+  const unavailable = await dispenser.dispense({
+    amount: 20,
+    currencyCode: "AUD"
+  });
+
+  assert.equal(unavailable.ok, false);
+  assert.equal(unavailable.code, "DENOMINATION_UNAVAILABLE");
+  assert.equal(simulator.terminalCash, 50);
+});
+
+test("simulator profile enforces transaction limits and accepted denominations", async () => {
+  const simulator = new RuntimeSimulator({ profile: cashProfile() });
+  const adapters = createSimulatedAdapters(simulator);
+
+  const overLimit = await adapters.cashDispenser.dispense({
+    amount: 120,
+    currencyCode: "AUD"
+  });
+  const invalidDeposit = await adapters.cashAcceptor.accept({
+    expectedAmount: 30,
+    currencyCode: "AUD"
+  });
+  const accepted = await adapters.cashAcceptor.accept({
+    expectedAmount: 70,
+    currencyCode: "AUD"
+  });
+
+  assert.equal(overLimit.code, "DISPENSE_LIMIT_EXCEEDED");
+  assert.equal(invalidDeposit.code, "DENOMINATION_UNAVAILABLE");
+  assert.equal(accepted.ok, true);
+  assert.equal(simulator.terminalCash, 190);
+  assert.deepEqual(simulator.cashInventorySnapshot(), {
+    "20": 2,
+    "50": 3
+  });
+});
+
+test("simulator profile disables unsupported capabilities", async () => {
+  const base = cashProfile();
+  const simulator = new RuntimeSimulator({
+    profile: {
+      ...base,
+      capabilities: {
+        ...base.capabilities,
+        cashDispenser: false,
+        cardReader: false,
+        hostAuthorization: false
+      }
+    }
+  });
+  const adapters = createSimulatedAdapters(simulator);
+
+  assert.equal(
+    (await adapters.cashDispenser.dispense({ amount: 20, currencyCode: "AUD" })).code,
+    "DISPENSER_UNAVAILABLE"
+  );
+  assert.equal((await adapters.cardReader.readCard()).code, "CARD_READER_UNAVAILABLE");
+  assert.equal(
+    (
+      await adapters.hostAuthorization.authorize({
+        transaction: "CashWithdrawal",
+        host: "CoreHost",
+        account: "Checking",
+        amount: 20,
+        currencyCode: "AUD",
+        pinless: false,
+        chipRequired: true
+      })
+    ).code,
+    "HOST_UNAVAILABLE"
+  );
+});
+
+test("legacy terminalCash option keeps scalar cash behavior", async () => {
+  const simulator = new RuntimeSimulator({ terminalCash: 2000 });
+  const adapters = createSimulatedAdapters(simulator);
+
+  const dispensed = await adapters.cashDispenser.dispense({
+    amount: 1500,
+    currencyCode: "USD"
+  });
+  const unspecifiedDeposit = await adapters.cashAcceptor.accept({
+    currencyCode: "USD"
+  });
+  const deposited = await adapters.cashAcceptor.accept({
+    expectedAmount: 2500,
+    currencyCode: "USD"
+  });
+
+  assert.equal(dispensed.ok, true);
+  assert.equal(unspecifiedDeposit.ok, true);
+  assert.equal(deposited.ok, true);
+  assert.equal(simulator.terminalCash, 3000);
+  assert.deepEqual(simulator.cashInventorySnapshot(), {});
+});
+
+test("simulator rejects deposits that exceed safe cash capacity", async () => {
+  const simulator = new RuntimeSimulator({
+    terminalCash: Number.MAX_SAFE_INTEGER - 5
+  });
+  const acceptor = createSimulatedAdapters(simulator).cashAcceptor;
+  const beforeInventory = simulator.cashInventorySnapshot();
+
+  const result = await acceptor.accept({
+    expectedAmount: 10,
+    currencyCode: "AUD"
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.code, "CASH_CAPACITY_EXCEEDED");
+  assert.equal(simulator.terminalCash, Number.MAX_SAFE_INTEGER - 5);
+  assert.deepEqual(simulator.cashInventorySnapshot(), beforeInventory);
+});
+
+test("simulator rejects recycled cash above the unit-count limit", async () => {
+  const profile = cashProfile();
+  const simulator = new RuntimeSimulator({
+    profile: {
+      ...profile,
+      cashManagement: {
+        ...profile.cashManagement,
+        dispenseDenominations: [1],
+        acceptDenominations: [1],
+        initialInventory: { "1": 10_000 }
+      }
+    }
+  });
+  const acceptor = createSimulatedAdapters(simulator).cashAcceptor;
+
+  const result = await acceptor.accept({
+    expectedAmount: 1,
+    currencyCode: "AUD"
+  });
+
+  assert.equal(result.code, "CASH_CAPACITY_EXCEEDED");
+  assert.equal(simulator.terminalCash, 10_000);
+  assert.deepEqual(simulator.cashInventorySnapshot(), { "1": 10_000 });
+});
+
+test("simulator bounds large unrepresentable cash allocation", () => {
+  const profile = cashProfile();
+  const simulator = new RuntimeSimulator({
+    profile: {
+      ...profile,
+      cashManagement: {
+        ...profile.cashManagement,
+        dispenseDenominations: [2],
+        acceptDenominations: [2],
+        initialInventory: { "2": 10_000 },
+        maxDispenseAmount: 10_000,
+        maxDepositAmount: 10_000
+      }
+    }
+  });
+
+  assert.equal(simulator.planDispense(9_999), undefined);
+  assert.deepEqual(simulator.cashInventorySnapshot(), { "2": 10_000 });
+});
+
+function cashProfile(): SimulatorProfile {
+  return {
+    id: "test.compact-cash",
+    currencyCode: "AUD",
+    capabilities: {
+      receiptPrinter: true,
+      cashDispenser: true,
+      cashAcceptor: true,
+      cardReader: true,
+      hostAuthorization: true
+    },
+    cashManagement: {
+      dispenseDenominations: [20, 50],
+      acceptDenominations: [20, 50],
+      initialInventory: {
+        "20": 1,
+        "50": 2
+      },
+      maxDispenseAmount: 100,
+      maxDepositAmount: 200,
+      recycleDeposits: true
+    }
+  };
+}
