@@ -1,5 +1,6 @@
 import { runFlow, type FlowGlobals, type FlowModule } from "../../flow-sdk/src/index.js";
 import type {
+  CustomerPrompt,
   CustomerType,
   FlowPackage,
   RuntimeEvent
@@ -42,6 +43,19 @@ export type TerminalSessionManagerOptions<Summary> = {
   includeEvents?: boolean;
   defaultTransaction?: string;
   configure?(globals: FlowGlobals, request: TerminalSessionRequest): void;
+};
+
+export type SerializedCustomerPrompt = CustomerPrompt & {
+  id: string;
+};
+
+export type TerminalSessionState<Summary> = {
+  sessionId: string;
+  prompt?: SerializedCustomerPrompt;
+  completed: boolean;
+  manifest: FlowPackage;
+  summary: Summary;
+  events?: RuntimeEvent[];
 };
 
 export class TerminalSessionManager<Summary> {
@@ -97,7 +111,7 @@ export class TerminalSessionManager<Summary> {
     return this.sessions.get(sessionId);
   }
 
-  async state(session: InteractiveSession): Promise<Record<string, unknown>> {
+  async state(session: InteractiveSession): Promise<TerminalSessionState<Summary>> {
     await waitForPromptOrResult(session);
     const events = session.runtime.Journal.all();
     const ok = session.result?.ok ?? !events.some((event) => event.type === "flow.failed");
@@ -153,7 +167,7 @@ async function waitForPromptOrResult(session: InteractiveSession): Promise<void>
   ]);
 }
 
-function serializePrompt(prompt?: PendingCustomerPrompt): Record<string, unknown> | undefined {
+function serializePrompt(prompt?: PendingCustomerPrompt): SerializedCustomerPrompt | undefined {
   if (!prompt) {
     return undefined;
   }

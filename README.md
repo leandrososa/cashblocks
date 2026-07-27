@@ -47,6 +47,10 @@ This writes JSONL journal events to `./data/demo.journal.jsonl`.
 - [Concepts](docs/concepts.md): runtime, flow packages, modules, adapters,
   journal, and diagnostic logs.
 - [Flow development](docs/flow-development.md): write and test flow packages.
+- [API reference](docs/api-reference.md): public contracts, classes, functions,
+  and package boundaries.
+- [Cookbook](docs/cookbook.md): focused recipes for flows, tests, adapters,
+  diagnostics, journals, and interactive sessions.
 - [Adapter development](docs/adapter-development.md): current adapter contracts,
   simulator boundaries, and hardware limits.
 - [Diagnostic logging](docs/diagnostic-logging.md): software logs separate from

@@ -20,12 +20,12 @@ flow architecture, and adapter boundaries.
 | Diagnostic logging contracts | Done |
 | Simulator account balances and terminal cash | Done |
 | Introductory developer docs | Done |
+| API reference and cookbook | Done |
 
 ## Next Priority
 
 | Area | Goal |
 | --- | --- |
-| Documentation | Expand API reference and cookbook examples. |
 | Flow testing | Add more examples for cancellation, warnings, and device faults. |
 | Simulator profiles | Model richer device and cash-management capabilities without binding to vendors. |
 | Observability | Add configurable diagnostic log sinks and correlation conventions. |
