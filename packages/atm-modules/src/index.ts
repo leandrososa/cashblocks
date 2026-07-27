@@ -217,6 +217,18 @@ export class SessionModule {
     this.runtime.Cashblocks.Log("New transaction started.");
   }
 
+  CancelTransaction(reason: string, transaction?: string): void {
+    this.runtime.Journal.append({
+      type: "transaction.cancelled",
+      source: "module",
+      sessionId: this.runtime.SessionId,
+      payload: {
+        reason,
+        ...(transaction ? { transaction } : {})
+      }
+    });
+  }
+
   AnotherTransaction(): boolean {
     return false;
   }

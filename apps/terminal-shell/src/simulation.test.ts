@@ -198,8 +198,135 @@ test("surfaces receipt warning cancellation without selecting a transaction", as
   assert.equal(result.summary.failed, false);
   assert.equal(result.summary.status, "cancelled");
   assert.equal(result.summary.screenTitle, "Transaction cancelled");
+  assert.equal(result.summary.cancellationReason, "receipt_unavailable");
   assert.equal(result.summary.warningOffered, true);
 });
+
+const cancellationScenarios = [
+  {
+    name: "cash withdrawal confirmation",
+    request: {
+      transaction: "CashWithdrawal",
+      transactionOptionAnswers: ["CANCEL"]
+    },
+    transaction: "CashWithdrawal",
+    reason: "withdrawal_confirmation_cancelled"
+  },
+  {
+    name: "cash deposit insertion",
+    request: {
+      transaction: "CashDeposit",
+      transactionOptionAnswers: ["CANCEL"]
+    },
+    transaction: "CashDeposit",
+    reason: "deposit_cash_not_inserted"
+  },
+  {
+    name: "fast cash confirmation",
+    request: {
+      transaction: "FastCash",
+      transactionOptionAnswers: ["Cancel"]
+    },
+    transaction: "FastCash",
+    reason: "fast_cash_confirmation_cancelled"
+  },
+  {
+    name: "cardless access",
+    request: {
+      customerType: "TOUCH" as const,
+      transactionOptionAnswers: ["Cancel"]
+    },
+    transaction: "CardlessWithdrawal",
+    reason: "cardless_access_cancelled"
+  },
+  {
+    name: "cardless withdrawal confirmation",
+    request: {
+      customerType: "TOUCH" as const,
+      transactionOptionAnswers: ["Continue", "CANCEL"]
+    },
+    transaction: "CardlessWithdrawal",
+    reason: "cardless_withdrawal_confirmation_cancelled"
+  }
+];
+
+for (const scenario of cancellationScenarios) {
+  test(`records ${scenario.name} cancellation without side effects`, async () => {
+    const result = await runSimulation(scenario.request);
+
+    assert.equal(result.summary.status, "cancelled");
+    assert.equal(result.summary.selectedTransaction, scenario.transaction);
+    assert.equal(result.summary.cancellationReason, scenario.reason);
+    assert.equal(result.summary.completed, false);
+    assert.equal(result.summary.failed, false);
+    assert.equal(
+      result.events.some(
+        (event) =>
+          event.type === "transaction.cancelled" &&
+          event.payload?.reason === scenario.reason
+      ),
+      true
+    );
+    assert.equal(
+      result.events.some((event) => event.type === "host.authorization_requested"),
+      false
+    );
+    assert.equal(
+      result.events.some((event) => event.type === "transaction.completed"),
+      false
+    );
+    assert.equal(
+      result.summary.terminalSteps.find(
+        (step) => step.label === "Authorize and operate devices"
+      )?.state,
+      "skipped"
+    );
+  });
+}
+
+const failureScenarios = [
+  {
+    name: "host decline",
+    request: { transaction: "CashWithdrawal", hostDeclined: true },
+    code: "HOST_DECLINED"
+  },
+  {
+    name: "offline card reader",
+    request: { transaction: "CashWithdrawal", cardReaderOffline: true },
+    code: "CARD_READER_OFFLINE"
+  },
+  {
+    name: "offline cash dispenser",
+    request: { transaction: "CashWithdrawal", dispenserOffline: true },
+    code: "DISPENSER_OFFLINE"
+  },
+  {
+    name: "offline cash acceptor",
+    request: { transaction: "CashDeposit", acceptorOffline: true },
+    code: "ACCEPTOR_OFFLINE"
+  }
+];
+
+for (const scenario of failureScenarios) {
+  test(`preserves journal invariants for ${scenario.name}`, async () => {
+    const result = await runSimulation(scenario.request);
+
+    assert.equal(result.summary.status, "failed");
+    assert.equal(result.summary.failureCode, scenario.code);
+    assert.equal(
+      result.events.some(
+        (event) =>
+          event.type === "transaction.failed" &&
+          event.payload?.code === scenario.code
+      ),
+      true
+    );
+    assert.equal(
+      result.events.some((event) => event.type === "transaction.completed"),
+      false
+    );
+  });
+}
 
 test("reads durable journal history grouped by session", async () => {
   const dir = await mkdtemp(join(tmpdir(), "cashblocks-history-"));

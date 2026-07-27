@@ -23,6 +23,7 @@ export type TerminalSessionRequest = {
   acceptorOffline?: boolean;
   cardReaderOffline?: boolean;
   receiptWarningAnswer?: "YES" | "NO";
+  transactionOptionAnswers?: string[];
   journalPath?: string;
 };
 
@@ -116,11 +117,16 @@ export function buildSimulatorOptions(
   request: TerminalSessionRequest,
   defaultTransaction = "BalanceInquiry"
 ): RuntimeSimulatorOptions {
+  const optionSelections = [
+    ...(request.receiptPrinterOut ? [request.receiptWarningAnswer ?? "YES"] : []),
+    ...(request.transactionOptionAnswers ?? [])
+  ];
+
   return {
     customerSelections: [request.transaction ?? defaultTransaction],
     accountSelections: [request.account ?? "Checking"],
     amountSelections: [request.amount ?? 100],
-    optionSelections: [request.receiptWarningAnswer ?? "YES"],
+    optionSelections,
     receiptPrinter: request.receiptPrinterOut
       ? { health: "DEGRADED", paper: "OUT" }
       : { health: "HEALTHY", paper: "OK" },

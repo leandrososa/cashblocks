@@ -18,6 +18,7 @@ export type RuntimeEventType =
   | "transaction.selected"
   | "transaction.started"
   | "transaction.completed"
+  | "transaction.cancelled"
   | "transaction.failed"
   | "device.status_changed"
   | "host.authorization_requested"
