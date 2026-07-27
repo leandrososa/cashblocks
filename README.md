@@ -89,7 +89,8 @@ This writes JSONL journal events to `./data/demo.journal.jsonl`.
   simulator ATM certification profile.
 - `examples/atm-basic`: simulator-backed ATM flow package.
 - `apps/terminal-shell`: local browser shell for running and inspecting the demo.
-- `apps/customer-terminal`: full-screen customer-facing terminal simulation.
+- `apps/customer-terminal`: accessible bilingual customer terminal with
+  hardware card events, cardless access, and static campaign screensaver.
 - `apps/native-terminal`: native launcher, configuration, and package builder.
 
 ## Useful Commands

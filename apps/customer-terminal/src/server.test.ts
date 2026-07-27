@@ -168,6 +168,106 @@ test("customer terminal releases completed sessions before enforcing capacity", 
   }
 });
 
+test("customer terminal starts a card session from a hardware event", async () => {
+  const fixture = await createFixture();
+  const server = createCustomerTerminalServer({
+    publicDir: fixture.publicDir,
+    allowedHosts: ["terminal.local"],
+    allowedOrigins: ["http://terminal.local"]
+  });
+  await listen(server);
+
+  try {
+    const state = await server.presentCard();
+    assert.equal(state.completed, false);
+    assert.equal(state.prompt?.kind, "pin");
+    assert.match(state.sessionId, /^session-[0-9a-f-]{36}$/);
+    await assert.rejects(() => server.presentCard(), /active customer session/);
+  } finally {
+    await close(server);
+    await rm(fixture.root, { recursive: true, force: true });
+  }
+});
+
+test("development card activation is explicit and disabled by default", async () => {
+  const fixture = await createFixture();
+  const headers = {
+    host: "terminal.local",
+    origin: "http://terminal.local",
+    contentType: "application/json"
+  };
+  const production = createCustomerTerminalServer({
+    publicDir: fixture.publicDir,
+    allowedHosts: ["terminal.local"],
+    allowedOrigins: ["http://terminal.local"]
+  });
+  await listen(production);
+
+  try {
+    assert.equal(
+      (
+        await send(
+          addressPort(production),
+          headers,
+          "/api/development/card-presented"
+        )
+      ).status,
+      404
+    );
+  } finally {
+    await close(production);
+  }
+
+  const development = createCustomerTerminalServer({
+    publicDir: fixture.publicDir,
+    allowedHosts: ["terminal.local"],
+    allowedOrigins: ["http://terminal.local"],
+    enableDevelopmentControls: true
+  });
+  await listen(development);
+
+  try {
+    const response = await send(
+      addressPort(development),
+      headers,
+      "/api/development/card-presented"
+    );
+    assert.equal(response.status, 200);
+    assert.match(
+      (JSON.parse(response.body) as { sessionId: string }).sessionId,
+      /^session-[0-9a-f-]{36}$/
+    );
+  } finally {
+    await close(development);
+    await rm(fixture.root, { recursive: true, force: true });
+  }
+});
+
+test("customer display event stream replays hardware activation in order", async () => {
+  const fixture = await createFixture();
+  const server = createCustomerTerminalServer({
+    publicDir: fixture.publicDir,
+    allowedHosts: ["terminal.local"],
+    allowedOrigins: ["http://terminal.local"]
+  });
+  await listen(server);
+
+  try {
+    await server.presentCard();
+    const response = await readDisplayFrames(addressPort(server), "0", 3);
+    assert.equal(response.status, 200);
+    assert.match(response.contentType, /^text\/event-stream/);
+    assert.match(response.body, /"type":"display-ready"/);
+    assert.ok(
+      response.body.indexOf('"type":"card-detected"') <
+        response.body.indexOf('"type":"session-started"')
+    );
+  } finally {
+    await close(server);
+    await rm(fixture.root, { recursive: true, force: true });
+  }
+});
+
 type SessionState = {
   sessionId: string;
   completed: boolean;
@@ -260,5 +360,48 @@ function send(
     );
     outgoing.once("error", reject);
     outgoing.end(body);
+  });
+}
+
+function readDisplayFrames(
+  port: number,
+  lastEventId: string,
+  expectedFrames: number
+): Promise<{
+  status: number;
+  contentType: string;
+  body: string;
+}> {
+  return new Promise((resolve, reject) => {
+    const outgoing = request(
+      {
+        hostname: "127.0.0.1",
+        port,
+        path: "/api/display-events",
+        method: "GET",
+        headers: {
+          host: "terminal.local",
+          origin: "http://terminal.local",
+          "last-event-id": lastEventId
+        }
+      },
+      (response) => {
+        let body = "";
+        response.on("data", (chunk) => {
+          body += Buffer.from(chunk).toString("utf8");
+          if (body.split("\n\n").filter(Boolean).length < expectedFrames) {
+            return;
+          }
+          resolve({
+            status: response.statusCode ?? 0,
+            contentType: String(response.headers["content-type"] ?? ""),
+            body
+          });
+          response.destroy();
+        });
+      }
+    );
+    outgoing.once("error", reject);
+    outgoing.end();
   });
 }

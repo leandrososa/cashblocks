@@ -1,13 +1,22 @@
-import { createServer, type IncomingMessage, type Server } from "node:http";
+import {
+  createServer,
+  type IncomingMessage,
+  type Server,
+  type ServerResponse
+} from "node:http";
 import { readFile } from "node:fs/promises";
 import { extname, isAbsolute, relative, resolve } from "node:path";
 
 import {
   TerminalSessionCapacityError,
   TerminalSessionManager,
-  type TerminalSessionRequest
+  type TerminalSessionRequest,
+  type TerminalSessionState
 } from "../../../packages/terminal-session/src/index.js";
-import { summarizeEvents } from "../../terminal-shell/src/simulation.js";
+import {
+  summarizeEvents,
+  type SimulationSummary
+} from "../../terminal-shell/src/simulation.js";
 import flow from "../../../examples/atm-basic/src/flow.js";
 import manifest from "../../../examples/atm-basic/cashblocks.flow.json" with {
   type: "json"
@@ -21,11 +30,39 @@ export type CustomerTerminalServerOptions = {
   sessionTtlMs?: number;
   allowedHosts: readonly string[];
   allowedOrigins: readonly string[];
+  enableDevelopmentControls?: boolean;
+};
+
+export type CustomerTerminalState = TerminalSessionState<SimulationSummary>;
+
+type CustomerTerminalDisplayEventPayload =
+  | {
+      type: "card-detected";
+    }
+  | {
+      type: "session-started";
+      state: CustomerTerminalState;
+    }
+  | {
+      type: "activation-failed";
+      message: string;
+    };
+
+export type CustomerTerminalDisplayEvent =
+  CustomerTerminalDisplayEventPayload & {
+    sequence: number;
+    occurredAt: string;
+  };
+
+export type CustomerTerminalServer = Server & {
+  presentCard(
+    request?: Omit<TerminalSessionRequest, "customerType">
+  ): Promise<CustomerTerminalState>;
 };
 
 export function createCustomerTerminalServer(
   options: CustomerTerminalServerOptions
-): Server {
+): CustomerTerminalServer {
   const publicDir = resolve(options.publicDir);
   const maxRequestBytes = options.maxRequestBytes ?? 64 * 1024;
   if (!Number.isSafeInteger(maxRequestBytes) || maxRequestBytes <= 0) {
@@ -43,8 +80,30 @@ export function createCustomerTerminalServer(
     maxSessions: options.maxSessions ?? 32,
     sessionTtlMs: options.sessionTtlMs ?? 15 * 60 * 1000
   });
+  const displayClients = new Set<ServerResponse>();
+  const displayHistory: CustomerTerminalDisplayEvent[] = [];
+  let displaySequence = 0;
+  const publish = (event: CustomerTerminalDisplayEventPayload): void => {
+    const payload: CustomerTerminalDisplayEvent = {
+      ...event,
+      sequence: ++displaySequence,
+      occurredAt: new Date().toISOString()
+    } as CustomerTerminalDisplayEvent;
+    displayHistory.push(payload);
+    if (displayHistory.length > 32) displayHistory.shift();
+    const frame = formatDisplayEvent(payload);
+    for (const client of displayClients) {
+      client.write(frame);
+    }
+  };
   const pruningTimer = setInterval(() => sessionManager.pruneExpired(), 60_000);
   pruningTimer.unref();
+  const keepaliveTimer = setInterval(() => {
+    for (const client of displayClients) {
+      client.write(": keepalive\n\n");
+    }
+  }, 15_000);
+  keepaliveTimer.unref();
 
   const server = createServer(async (request, response) => {
     try {
@@ -76,6 +135,60 @@ export function createCustomerTerminalServer(
 
       if (method === "GET" && url.pathname === "/api/manifest") {
         writeJson(response, 200, manifest);
+        return;
+      }
+
+      if (method === "GET" && url.pathname === "/api/display-events") {
+        response.writeHead(200, {
+          "content-type": "text/event-stream; charset=utf-8",
+          "cache-control": "no-store",
+          connection: "keep-alive",
+          "x-accel-buffering": "no",
+          "content-security-policy":
+            "default-src 'none'; frame-ancestors 'none'"
+        });
+        response.write(
+          `data: ${JSON.stringify({
+            sequence: displaySequence,
+            type: "display-ready",
+            occurredAt: new Date().toISOString()
+          })}\n\n`
+        );
+        const lastSequence = parseLastEventSequence(
+          request.headers["last-event-id"]
+        );
+        if (lastSequence !== undefined) {
+          for (const event of displayHistory) {
+            if (event.sequence > lastSequence) {
+              response.write(formatDisplayEvent(event));
+            }
+          }
+        }
+        displayClients.add(response);
+        request.once("close", () => displayClients.delete(response));
+        return;
+      }
+
+      if (
+        method === "POST" &&
+        url.pathname === "/api/development/card-presented"
+      ) {
+        if (!options.enableDevelopmentControls) {
+          writeJson(response, 404, { error: "Not found" });
+          return;
+        }
+        const body = await readJson<unknown>(request, maxRequestBytes);
+        if (!isEmptyObject(body)) {
+          throw new HttpError(
+            400,
+            "Development card presentation does not accept options."
+          );
+        }
+        const state = await server.presentCard();
+        writeJson(response, 200, {
+          status: "accepted",
+          sessionId: state.sessionId
+        });
         return;
       }
 
@@ -124,6 +237,10 @@ export function createCustomerTerminalServer(
         writeJson(response, 503, { error: error.message });
         return;
       }
+      if (error instanceof TerminalDisplayBusyError) {
+        writeJson(response, 409, { error: error.message });
+        return;
+      }
       if (error instanceof HttpError) {
         writeJson(response, error.status, { error: error.message });
         return;
@@ -133,8 +250,40 @@ export function createCustomerTerminalServer(
           error instanceof Error ? error.message : "Unexpected server error"
       });
     }
+  }) as CustomerTerminalServer;
+
+  server.presentCard = async (request = {}) => {
+    try {
+      if (sessionManager.size > 0) {
+        throw new TerminalDisplayBusyError();
+      }
+      const session = sessionManager.start({
+        ...request,
+        journalPath: options.journalPath
+      });
+      publish({ type: "card-detected" });
+      const state = await sessionManager.state(session);
+      publish({ type: "session-started", state });
+      return state;
+    } catch (error) {
+      publish({
+        type: "activation-failed",
+        message:
+          error instanceof Error
+            ? error.message
+            : "The terminal could not start a session."
+      });
+      throw error;
+    }
+  };
+  server.once("close", () => {
+    clearInterval(pruningTimer);
+    clearInterval(keepaliveTimer);
+    for (const client of displayClients) {
+      client.end();
+    }
+    displayClients.clear();
   });
-  server.once("close", () => clearInterval(pruningTimer));
   return server;
 }
 
@@ -177,6 +326,11 @@ function contentType(filePath: string): string {
   if (extname(filePath) === ".html") return "text/html; charset=utf-8";
   if (extname(filePath) === ".css") return "text/css; charset=utf-8";
   if (extname(filePath) === ".js") return "text/javascript; charset=utf-8";
+  if (extname(filePath) === ".json") return "application/json; charset=utf-8";
+  if (extname(filePath) === ".png") return "image/png";
+  if (extname(filePath) === ".jpg" || extname(filePath) === ".jpeg") {
+    return "image/jpeg";
+  }
   return "application/octet-stream";
 }
 
@@ -229,6 +383,13 @@ class HttpError extends Error {
   }
 }
 
+class TerminalDisplayBusyError extends Error {
+  constructor() {
+    super("The terminal already has an active customer session.");
+    this.name = "TerminalDisplayBusyError";
+  }
+}
+
 function validateAuthority(
   request: IncomingMessage,
   allowedHosts: ReadonlySet<string>,
@@ -256,4 +417,27 @@ function normalizedSet(
     throw new Error(`${label} must contain at least one non-empty value.`);
   }
   return new Set(normalized);
+}
+
+function isEmptyObject(value: unknown): value is Record<string, never> {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value) &&
+    Object.getPrototypeOf(value) === Object.prototype &&
+    Object.keys(value).length === 0
+  );
+}
+
+function formatDisplayEvent(event: CustomerTerminalDisplayEvent): string {
+  return `id: ${event.sequence}\ndata: ${JSON.stringify(event)}\n\n`;
+}
+
+function parseLastEventSequence(value: string | string[] | undefined):
+  | number
+  | undefined {
+  const candidate = Array.isArray(value) ? value[0] : value;
+  if (!candidate || !/^\d{1,10}$/.test(candidate)) return undefined;
+  const sequence = Number(candidate);
+  return Number.isSafeInteger(sequence) ? sequence : undefined;
 }

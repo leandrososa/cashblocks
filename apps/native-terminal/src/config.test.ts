@@ -81,13 +81,32 @@ test("native terminal preflight requires assets and prepares journal directory",
 
   await assert.rejects(() => prepareNativeTerminal(config));
   await mkdir(publicDir, { recursive: true });
-  await Promise.all(
-    ["index.html", "app.js", "style.css"].map((asset) =>
-      writeFile(join(publicDir, asset), asset, "utf8")
-    )
-  );
+  await writeTerminalAssets(publicDir);
   await prepareNativeTerminal(config);
   await rm(root, { recursive: true, force: true });
+});
+
+test("native terminal validates campaign assets before listening", async () => {
+  const root = await mkdtemp(join(tmpdir(), "cashblocks-native-"));
+  const publicDir = join(root, "public");
+  const config = parseNativeTerminalConfig(
+    ["--public-dir", publicDir, "--journal", join(root, "events.jsonl")],
+    {},
+    root
+  );
+  await mkdir(publicDir, { recursive: true });
+  await writeTerminalAssets(publicDir);
+  await writeFile(
+    join(publicDir, "campaigns", "campaigns.json"),
+    '{"version":1,"campaigns":[{"image":"/campaigns/missing.png"}]}',
+    "utf8"
+  );
+
+  try {
+    await assert.rejects(() => prepareNativeTerminal(config), /ENOENT/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });
 
 test("native terminal preflight rejects directories masquerading as assets", async () => {
@@ -111,3 +130,22 @@ test("native terminal preflight rejects directories masquerading as assets", asy
     await rm(root, { recursive: true, force: true });
   }
 });
+
+async function writeTerminalAssets(publicDir: string): Promise<void> {
+  const campaignsDir = join(publicDir, "campaigns");
+  await mkdir(campaignsDir, { recursive: true });
+  await Promise.all([
+    ...["index.html", "app.js", "style.css"].map((asset) =>
+      writeFile(join(publicDir, asset), asset, "utf8")
+    ),
+    writeFile(join(campaignsDir, "campaign.png"), "image", "utf8"),
+    writeFile(
+      join(campaignsDir, "campaigns.json"),
+      JSON.stringify({
+        version: 1,
+        campaigns: [{ image: "/campaigns/campaign.png" }]
+      }),
+      "utf8"
+    )
+  ]);
+}

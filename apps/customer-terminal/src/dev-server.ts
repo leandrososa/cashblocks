@@ -10,7 +10,8 @@ const server = createCustomerTerminalServer({
   publicDir: join(process.cwd(), "apps/customer-terminal/public"),
   journalPath: process.env.CASHBLOCKS_JOURNAL_PATH,
   allowedHosts: [new URL(origin).host],
-  allowedOrigins: [new URL(origin).origin]
+  allowedOrigins: [new URL(origin).origin],
+  enableDevelopmentControls: true
 });
 
 server.listen(port, host, () => {

@@ -14,7 +14,8 @@ bun run package:native
 The command writes `release/native-terminal/` with:
 
 - `cashblocks-terminal` (`.exe` on Windows)
-- customer-terminal static assets
+- customer-terminal static assets, including the local campaign manifest and
+  campaign images
 - `package-manifest.json` for installers and service wrappers
 
 Run the executable with its working directory set to the release directory.
@@ -45,7 +46,9 @@ Remote deployments must put authentication, TLS, firewall policy, and kiosk
 network isolation in front of the terminal server. The launcher also verifies
 all required UI assets before listening, verifies journal writability, caps
 live sessions, expires inactive sessions, and forces shutdown after a bounded
-grace period.
+grace period. Campaign paths are constrained to the packaged public directory;
+missing files, invalid JSON, and symbolic links fail preflight before the
+terminal begins listening.
 
 ## Deployment Boundary
 

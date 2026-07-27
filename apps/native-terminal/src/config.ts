@@ -1,5 +1,5 @@
-import { mkdir, open, stat } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
+import { lstat, mkdir, open, readFile } from "node:fs/promises";
+import { dirname, isAbsolute, relative, resolve } from "node:path";
 
 export type NativeTerminalConfig = {
   host: string;
@@ -68,15 +68,57 @@ export async function prepareNativeTerminal(
 ): Promise<void> {
   await Promise.all(
     ["index.html", "app.js", "style.css"].map(async (asset) => {
-      const assetStat = await stat(resolve(config.publicDir, asset));
-      if (!assetStat.isFile()) {
+      const assetStat = await lstat(resolve(config.publicDir, asset));
+      if (!assetStat.isFile() || assetStat.isSymbolicLink()) {
         throw new Error(`Native terminal asset ${asset} must be a file.`);
       }
     })
   );
+  await validateCampaignAssets(config.publicDir);
   await mkdir(dirname(config.journalPath), { recursive: true });
   const journal = await open(config.journalPath, "a");
   await journal.close();
+}
+
+async function validateCampaignAssets(publicDir: string): Promise<void> {
+  const manifestPath = resolve(publicDir, "campaigns", "campaigns.json");
+  const manifestStat = await lstat(manifestPath);
+  if (!manifestStat.isFile() || manifestStat.isSymbolicLink()) {
+    throw new Error("Native terminal campaign manifest must be a file.");
+  }
+  let manifest: unknown;
+  try {
+    manifest = JSON.parse(await readFile(manifestPath, "utf8")) as unknown;
+  } catch {
+    throw new Error("Native terminal campaign manifest must be valid JSON.");
+  }
+  if (
+    !isRecord(manifest) ||
+    manifest.version !== 1 ||
+    !Array.isArray(manifest.campaigns) ||
+    manifest.campaigns.length < 1 ||
+    manifest.campaigns.length > 10
+  ) {
+    throw new Error("Native terminal campaign manifest is invalid.");
+  }
+  for (const campaign of manifest.campaigns) {
+    if (
+      !isRecord(campaign) ||
+      typeof campaign.image !== "string" ||
+      !/^\/campaigns\/[a-z0-9-]+\.(?:png|jpe?g)$/.test(campaign.image)
+    ) {
+      throw new Error("Native terminal campaign entry is invalid.");
+    }
+    const imagePath = resolve(publicDir, campaign.image.slice(1));
+    const relativePath = relative(resolve(publicDir), imagePath);
+    if (relativePath.startsWith("..") || isAbsolute(relativePath)) {
+      throw new Error("Native terminal campaign image escapes publicDir.");
+    }
+    const imageStat = await lstat(imagePath);
+    if (!imageStat.isFile() || imageStat.isSymbolicLink()) {
+      throw new Error("Native terminal campaign image must be a file.");
+    }
+  }
 }
 
 function parseArguments(argv: readonly string[]): Map<string, string> {
@@ -133,4 +175,8 @@ function validateOrigin(value: string): string {
     throw new Error("Native terminal origin must be an HTTP(S) origin.");
   }
   return origin.origin;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

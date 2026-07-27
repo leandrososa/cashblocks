@@ -50,10 +50,31 @@ bun run customer
 Open `http://localhost:4174`.
 
 This is the customer-facing kiosk simulation. It has no developer fault panel,
-selector, or journal timeline. Start from `Insert card`, choose the transaction
-inside the ATM screen, and finish with `Print receipt` or `Finish`.
+selector, operator entry point, or journal timeline. Its idle screen rotates
+local campaign images and waits for a physical card event. The card instruction
+is status text, not a button.
 
-Operator mode is available through `Operator access` with service code `0000`.
+For local development, press `Shift+C` to simulate presenting a physical card.
+The shortcut uses an endpoint that is enabled only by the development launcher.
+You can also choose `Operar sin tarjeta` / `Bank without a card` to exercise the
+cardless flow.
+
+Verify the customer experience in both languages:
+
+1. Let the idle screen rotate through the three bundled campaigns.
+2. Toggle `English` / `Español` and the accessibility preference.
+3. Press `Shift+C`, enter a four-digit PIN, and complete each transaction type.
+4. Finish a result screen and confirm the terminal returns to the screensaver.
+5. Resize the browser to confirm the layout remains usable at 800×600,
+   1024×768, 1280×1024, 1920×1080, and 1080×1920.
+6. At every resolution, verify the idle campaign, PIN keypad, transaction menu,
+   amount entry, confirmation, processing, and result screens. No control
+   should be clipped horizontally; vertical scrolling is reserved for content
+   that cannot fit after accessibility text enlargement.
+
+Production device integrations call `CustomerTerminalServer.presentCard()` when
+the card reader reports a presentation. The production/native server does not
+expose the development simulation endpoint.
 
 ## Persist Journal History
 
