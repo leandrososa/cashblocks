@@ -1120,7 +1120,8 @@ export class CashblocksRuntime {
         ? new JsonlJournalPersistence(options.journalPath)
         : undefined
     });
-    this.SessionId = options.sessionId ?? `session-${Date.now()}`;
+    this.SessionId =
+      options.sessionId ?? `session-${globalThis.crypto.randomUUID()}`;
     this.AdapterTimeoutMs = options.adapterTimeoutMs ?? 30_000;
     if (
       !Number.isSafeInteger(this.AdapterTimeoutMs) ||

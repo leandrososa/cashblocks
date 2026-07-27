@@ -1,0 +1,9 @@
+{
+  "name": "@cashblocks/native-terminal",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "cashblocks-terminal": "../../dist/apps/native-terminal/src/main.js"
+  }
+}

@@ -59,6 +59,8 @@ This writes JSONL journal events to `./data/demo.journal.jsonl`.
   authorization codec/adapter and its deliberate production limits.
 - [Device gateway adapters](docs/device-gateway.md): transport-neutral adapters
   for printers, dispensers, acceptors, and card readers.
+- [Native packaging](docs/native-packaging.md): compile the customer terminal
+  into a local executable bundle with deployment-safe defaults.
 - [Industry context](docs/industry-context.md): where XFS, J/XFS, XFS4IoT, and
   ISO8583 fit.
 - [Roadmap](docs/roadmap.md): what exists, what is next, and what is outside the
@@ -79,6 +81,7 @@ This writes JSONL journal events to `./data/demo.journal.jsonl`.
 - `examples/atm-basic`: simulator-backed ATM flow package.
 - `apps/terminal-shell`: local browser shell for running and inspecting the demo.
 - `apps/customer-terminal`: full-screen customer-facing terminal simulation.
+- `apps/native-terminal`: native launcher, configuration, and package builder.
 
 ## Useful Commands
 
@@ -90,6 +93,7 @@ bun run example:atm
 bun run dev
 bun run customer
 bun run demo
+bun run package:native
 ```
 
 Set `CASHBLOCKS_JOURNAL_PATH=./data/runtime.journal.jsonl` before `bun run dev`

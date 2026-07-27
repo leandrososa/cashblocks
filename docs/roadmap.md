@@ -27,20 +27,21 @@ flow architecture, and adapter boundaries.
 | Validated adapter identity, capabilities, and operation context | Done |
 | Transport-independent ISO8583 authorization adapter | Done |
 | Vendor-neutral device gateway adapters | Done |
+| Native customer-terminal executable packaging | Done |
 
 ## Next Priority
 
 | Area | Goal |
 | --- | --- |
+| Replay tooling | Inspect, validate, and replay durable journal sessions. |
+| Certification support | Add deterministic recovery, audit, and conformance harnesses. |
+
 ## Planned Later
 
 | Area | Direction |
 | --- | --- |
 | Production device integration | Add a concrete XFS4IoT or vendor transport, recovery policy, drivers, and hardware certification. |
 | Production host integration | Add framing, security, reversals, durable STANs, and certification against a real host specification. |
-| Native packaging | Wrap the shell/runtime for local terminal environments. |
-| Replay tooling | Use durable journals to inspect and replay runtime sessions. |
-| Certification support | Add stricter recovery, audit, and test harnesses once real targets exist. |
 
 ## Outside the MVP
 
@@ -49,6 +50,7 @@ flow architecture, and adapter boundaries.
 | Certification-grade XFS/J-XFS implementations | Requires hardware, vendor service providers, and deployment targets. |
 | Production ISO8583 host stack | Requires host specs, security requirements, keys, and network certification. |
 | Vendor-specific behavior | Should wait for device profiles, docs, or real devices. |
+| Signed OS installers and kiosk lockdown | Require target operating systems, signing identities, and fleet policy. |
 | Full observability platform | The current goal is a minimal diagnostic logging boundary. |
 
 The near-term product promise is not "runs every ATM." It is "makes ATM flow

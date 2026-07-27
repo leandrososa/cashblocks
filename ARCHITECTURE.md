@@ -21,7 +21,9 @@ Cashblocks separates stable terminal behavior from project-specific flow code.
 - `examples/atm-basic` demonstrates a financial ATM flow similar to legacy
   customer scripts.
 - `apps/terminal-shell` is the initial web shell for simulator inspection. It is
-  intentionally small so it can be wrapped by Tauri once native packaging starts.
+  intentionally small and shares the runtime with the customer terminal.
+- `apps/native-terminal` compiles the customer terminal server into a local
+  executable bundle with durable journal and loopback-safe defaults.
 
 ## Flow Boundary
 
