@@ -13,6 +13,13 @@
       "name": "@cashblocks/customer-terminal",
       "version": "0.1.0",
     },
+    "apps/native-terminal": {
+      "name": "@cashblocks/native-terminal",
+      "version": "0.1.0",
+      "bin": {
+        "cashblocks-terminal": "../../dist/apps/native-terminal/src/main.js",
+      },
+    },
     "apps/terminal-shell": {
       "name": "@cashblocks/terminal-shell",
       "version": "0.1.0",
@@ -25,9 +32,31 @@
       "name": "@cashblocks/atm-modules",
       "version": "0.1.0",
     },
+    "packages/certification-harness": {
+      "name": "@cashblocks/certification-harness",
+      "version": "0.1.0",
+      "bin": {
+        "cashblocks-certify": "./src/cli.ts",
+      },
+    },
+    "packages/device-gateway": {
+      "name": "@cashblocks/device-gateway",
+      "version": "0.1.0",
+    },
     "packages/flow-sdk": {
       "name": "@cashblocks/flow-sdk",
       "version": "0.1.0",
+    },
+    "packages/host-iso8583": {
+      "name": "@cashblocks/host-iso8583",
+      "version": "0.1.0",
+    },
+    "packages/journal-replay": {
+      "name": "@cashblocks/journal-replay",
+      "version": "0.1.0",
+      "bin": {
+        "cashblocks-replay": "./src/cli.ts",
+      },
     },
     "packages/runtime-contracts": {
       "name": "@cashblocks/runtime-contracts",
@@ -45,11 +74,21 @@
   "packages": {
     "@cashblocks/atm-modules": ["@cashblocks/atm-modules@workspace:packages/atm-modules"],
 
+    "@cashblocks/certification-harness": ["@cashblocks/certification-harness@workspace:packages/certification-harness"],
+
     "@cashblocks/customer-terminal": ["@cashblocks/customer-terminal@workspace:apps/customer-terminal"],
+
+    "@cashblocks/device-gateway": ["@cashblocks/device-gateway@workspace:packages/device-gateway"],
 
     "@cashblocks/example-atm-basic": ["@cashblocks/example-atm-basic@workspace:examples/atm-basic"],
 
     "@cashblocks/flow-sdk": ["@cashblocks/flow-sdk@workspace:packages/flow-sdk"],
+
+    "@cashblocks/host-iso8583": ["@cashblocks/host-iso8583@workspace:packages/host-iso8583"],
+
+    "@cashblocks/journal-replay": ["@cashblocks/journal-replay@workspace:packages/journal-replay"],
+
+    "@cashblocks/native-terminal": ["@cashblocks/native-terminal@workspace:apps/native-terminal"],
 
     "@cashblocks/runtime-contracts": ["@cashblocks/runtime-contracts@workspace:packages/runtime-contracts"],
 
