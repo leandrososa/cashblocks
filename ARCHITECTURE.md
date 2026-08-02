@@ -14,10 +14,22 @@ Cashblocks separates stable terminal behavior from project-specific flow code.
 - `flow-sdk` binds a flow module to controlled runtime globals. Flow code can
   orchestrate modules but cannot directly access devices, filesystem, processes,
   or network.
+- `host-iso8583` implements authorization plus framed TLS transport, durable
+  STAN allocation, and append-only reversal recovery behind the host boundary.
+- `device-gateway` maps runtime device contracts to an external device process
+  over an isolated, secure WebSocket transport while keeping vendor APIs out of
+  flow packages.
+- `journal-replay` validates durable events and projects session state without
+  re-executing external side effects.
+- `certification-harness` executes bounded conformance scenarios, validates
+  journal and financial invariants, classifies recovery, and emits reproducible
+  evidence digests.
 - `examples/atm-basic` demonstrates a financial ATM flow similar to legacy
   customer scripts.
 - `apps/terminal-shell` is the initial web shell for simulator inspection. It is
-  intentionally small so it can be wrapped by Tauri once native packaging starts.
+  intentionally small and shares the runtime with the customer terminal.
+- `apps/native-terminal` compiles the customer terminal server into a local
+  executable bundle with durable journal and loopback-safe defaults.
 
 ## Flow Boundary
 
@@ -37,10 +49,10 @@ diagnosis in diagnostic logs instead of crashing without context.
 
 ## Adapter Boundary
 
-The MVP ships simulator adapters only. Real integrations such as CEN/XFS,
-J/XFS, ISO8583, legacy host protocols, receipt printers, card readers, and cash
-dispensers should be added behind module/runtime adapter contracts without
-changing flow scripts.
+The MVP ships simulator adapters plus transport-independent host and device
+gateway adapters. Deployment-specific CEN/XFS, J/XFS, XFS4IoT, legacy host, and
+vendor implementations plug into these boundaries without changing flow
+scripts.
 
 Runtime events can be persisted as JSON Lines by passing `journalPath` to the
 runtime or flow SDK. In-memory journal state remains available for the active

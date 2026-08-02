@@ -31,6 +31,7 @@ export type SimulationSummary = {
   completed: boolean;
   failed: boolean;
   failureCode?: string;
+  cancellationReason?: string;
   warningOffered: boolean;
   eventCount: number;
 };
@@ -99,17 +100,23 @@ export function summarizeEvents(events: RuntimeEvent[], flowOk = true): Simulati
   const amount = events.find(
     (event) => event.type === "transaction.detail_recorded" && event.payload?.detail === "amount.selected"
   );
+  const cancelled = events.find((event) => event.type === "transaction.cancelled");
+  const reconciliation = events.find(
+    (event) => event.type === "transaction.reconciliation_required"
+  );
   const failed = events.find((event) => event.type === "transaction.failed");
   const completed = events.find((event) => event.type === "transaction.completed");
   const warning = events.find(
     (event) => event.type === "ui.prompt" && event.payload?.screen === "PrinterDown"
   );
-  const failedState = !flowOk || Boolean(failed);
+  const failedState = !flowOk || Boolean(failed) || Boolean(reconciliation);
   const completedState = Boolean(completed);
-  const cancelledState = Boolean(warning) && !selected && !failedState && !completedState;
+  const cancelledState = Boolean(cancelled);
   const selectedTransaction =
     typeof selected?.payload?.transaction === "string"
       ? selected.payload.transaction
+      : typeof cancelled?.payload?.transaction === "string"
+        ? cancelled.payload.transaction
       : undefined;
   const selectedAccount =
     typeof account?.payload?.account === "string" ? account.payload.account : undefined;
@@ -150,9 +157,13 @@ export function summarizeEvents(events: RuntimeEvent[], flowOk = true): Simulati
   const failureCode =
     typeof failed?.payload?.code === "string"
       ? failed.payload.code
+      : typeof reconciliation?.payload?.code === "string"
+        ? reconciliation.payload.code
       : !flowOk
         ? "FLOW_FAILED"
         : undefined;
+  const cancellationReason =
+    typeof cancelled?.payload?.reason === "string" ? cancelled.payload.reason : undefined;
   const status = failedState
     ? "failed"
     : completedState
@@ -173,6 +184,7 @@ export function summarizeEvents(events: RuntimeEvent[], flowOk = true): Simulati
     terminalCashBefore,
     terminalCashAfter,
     failureCode,
+    cancellationReason,
     warningOffered: Boolean(warning),
     events
   });
@@ -198,6 +210,7 @@ export function summarizeEvents(events: RuntimeEvent[], flowOk = true): Simulati
     completed: completedState,
     failed: failedState,
     failureCode,
+    cancellationReason,
     warningOffered: Boolean(warning),
     eventCount: events.length
   };
@@ -216,6 +229,7 @@ function createTerminalScreen(input: {
   terminalCashBefore?: number;
   terminalCashAfter?: number;
   failureCode?: string;
+  cancellationReason?: string;
   warningOffered: boolean;
   events: RuntimeEvent[];
 }): { title: string; message: string; operatorMessage: string; steps: TerminalStep[] } {
@@ -246,10 +260,10 @@ function createTerminalScreen(input: {
   if (input.status === "cancelled") {
     return {
       title: "Transaction cancelled",
-      message: input.warningOffered
-        ? "Receipt printing is unavailable. The customer chose not to continue."
-        : "The customer cancelled before a transaction was selected.",
-      operatorMessage: "No transaction was selected after the warning path.",
+      message: cancellationMessage(input.cancellationReason),
+      operatorMessage: input.cancellationReason
+        ? `Customer cancellation: ${input.cancellationReason}.`
+        : "The customer cancelled the transaction.",
       steps
     };
   }
@@ -279,6 +293,7 @@ function createTerminalSteps(input: {
   terminalCashBefore?: number;
   terminalCashAfter?: number;
   failureCode?: string;
+  cancellationReason?: string;
   warningOffered: boolean;
   events: RuntimeEvent[];
 }): TerminalStep[] {
@@ -357,7 +372,9 @@ function createTerminalSteps(input: {
     },
     {
       label: "Authorize and operate devices",
-      state: input.status === "failed"
+      state: input.status === "cancelled"
+        ? "skipped"
+        : input.status === "failed"
         ? "failed"
         : hasHostRequest || hasHostResult
           ? "done"
@@ -393,10 +410,14 @@ function operationDetail(input: {
   cashAdjustment?: string;
   failureCode?: string;
 }): string {
+  if (input.status === "cancelled") return "No authorization or device operation performed.";
   if (input.failureCode === "HOST_DECLINED") return "Host declined authorization.";
   if (input.failureCode === "DISPENSER_OFFLINE") return "Cash dispenser could not operate.";
   if (input.failureCode === "ACCEPTOR_OFFLINE") return "Cash acceptor could not operate.";
   if (input.failureCode === "CARD_READER_OFFLINE") return "Operation skipped after card reader failure.";
+  if (input.failureCode === "ADAPTER_OUTCOME_UNKNOWN") {
+    return "Device outcome is unknown and requires reconciliation.";
+  }
 
   if (input.selectedTransaction === "BalanceInquiry") return "Balance lookup completed in simulator.";
   if (input.selectedTransaction === "CashWithdrawal") return "Authorization approved and cash dispensed.";
@@ -407,7 +428,23 @@ function operationDetail(input: {
   }
   if (input.selectedTransaction?.startsWith("Admin")) return "Administrative operation completed.";
 
-  return input.status === "cancelled" ? "No device operation performed." : "No device action required.";
+  return "No device action required.";
+}
+
+function cancellationMessage(reason?: string): string {
+  if (reason === "receipt_unavailable") {
+    return "Receipt printing is unavailable. The customer chose not to continue.";
+  }
+  if (reason === "deposit_cash_not_inserted") {
+    return "The customer cancelled before inserting deposit cash.";
+  }
+  if (reason === "cardless_access_cancelled") {
+    return "The customer cancelled cardless access.";
+  }
+  if (reason?.includes("confirmation_cancelled")) {
+    return "The customer declined the transaction confirmation.";
+  }
+  return "The customer cancelled the transaction.";
 }
 
 function failureScreen(
@@ -446,6 +483,15 @@ function failureScreen(
       title: "Card reader unavailable",
       message: "This terminal cannot read cards right now.",
       operatorMessage: "Card reader adapter reported CARD_READER_OFFLINE.",
+      steps
+    };
+  }
+
+  if (code === "ADAPTER_OUTCOME_UNKNOWN") {
+    return {
+      title: "Operator review required",
+      message: "The device outcome could not be confirmed. Please contact an operator.",
+      operatorMessage: "Adapter timeout requires transaction reconciliation.",
       steps
     };
   }

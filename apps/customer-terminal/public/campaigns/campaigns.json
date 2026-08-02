@@ -1,0 +1,56 @@
+{
+  "version": 1,
+  "campaigns": [
+    {
+      "id": "everyday-city",
+      "image": "/campaigns/everyday-city.jpg",
+      "durationMs": 9000,
+      "content": {
+        "es": {
+          "headline": "Simple para todos los días",
+          "body": "Tu banco, siempre cerca.",
+          "alt": "Clienta utilizando servicios bancarios en la ciudad"
+        },
+        "en": {
+          "headline": "Simple for every day",
+          "body": "Your bank, always close.",
+          "alt": "Customer using banking services in the city"
+        }
+      }
+    },
+    {
+      "id": "first-home",
+      "image": "/campaigns/first-home.jpg",
+      "durationMs": 9000,
+      "content": {
+        "es": {
+          "headline": "Tu próximo paso, más cerca",
+          "body": "Planes que crecen contigo.",
+          "alt": "Familia reunida frente a su nuevo hogar"
+        },
+        "en": {
+          "headline": "Your next step, closer",
+          "body": "Plans that grow with you.",
+          "alt": "Family gathered in front of their new home"
+        }
+      }
+    },
+    {
+      "id": "local-business",
+      "image": "/campaigns/local-business.jpg",
+      "durationMs": 9000,
+      "content": {
+        "es": {
+          "headline": "Impulsamos lo que viene",
+          "body": "Soluciones para hacer crecer tu negocio.",
+          "alt": "Comerciante preparando su negocio para abrir"
+        },
+        "en": {
+          "headline": "Backing what comes next",
+          "body": "Solutions that help your business grow.",
+          "alt": "Business owner preparing her shop to open"
+        }
+      }
+    }
+  ]
+}

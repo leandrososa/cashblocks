@@ -18,7 +18,9 @@ export type RuntimeEventType =
   | "transaction.selected"
   | "transaction.started"
   | "transaction.completed"
+  | "transaction.cancelled"
   | "transaction.failed"
+  | "transaction.reconciliation_required"
   | "device.status_changed"
   | "host.authorization_requested"
   | "host.authorization_result"
@@ -42,12 +44,19 @@ export type RuntimeEventDraft = Omit<RuntimeEvent, "seq" | "ts"> & {
 
 export type DiagnosticLogLevel = "debug" | "info" | "warn" | "error";
 
+export type DiagnosticCorrelation = {
+  sessionId: string;
+  transactionId?: string;
+  transactionName?: string;
+};
+
 export type DiagnosticLogEntry = {
   level: DiagnosticLogLevel;
   ts: string;
   source: "runtime" | "flow" | "module" | "adapter" | "simulator" | "ui";
   message: string;
   sessionId?: string;
+  correlation?: DiagnosticCorrelation;
   error?: {
     name: string;
     message: string;
@@ -86,25 +95,59 @@ export type ReceiptPrinterStatus = {
   paper: PaperStatus;
 };
 
-export type ReceiptPrinterAdapter = {
-  readonly id: string;
-  getStatus(): Promise<ReceiptPrinterStatus>;
-  printReceipt(lines: string[]): Promise<AdapterResult>;
+export type AdapterKind =
+  | "receipt-printer"
+  | "cash-dispenser"
+  | "cash-acceptor"
+  | "card-reader"
+  | "host-authorization";
+
+export type AdapterOperationContext = {
+  operationId: string;
+  sessionId: string;
+  adapterId: string;
+  operation: string;
+  transactionName?: string;
+  timeoutMs: number;
+  startedAt: string;
+  deadlineAt: string;
+  signal: AbortSignal;
 };
 
-export type CashDispenserAdapter = {
+export type TerminalAdapter = {
   readonly id: string;
-  dispense(input: { amount: number; currencyCode: string }): Promise<AdapterResult>;
+  readonly kind: AdapterKind;
+  readonly capabilities: readonly string[];
 };
 
-export type CashAcceptorAdapter = {
-  readonly id: string;
-  accept(input: { expectedAmount?: number; currencyCode: string }): Promise<AdapterResult>;
+export type ReceiptPrinterAdapter = TerminalAdapter & {
+  readonly kind: "receipt-printer";
+  getStatus(context?: AdapterOperationContext): Promise<ReceiptPrinterStatus>;
+  printReceipt(
+    lines: string[],
+    context?: AdapterOperationContext
+  ): Promise<AdapterResult>;
 };
 
-export type CardReaderAdapter = {
-  readonly id: string;
-  readCard(): Promise<AdapterResult>;
+export type CashDispenserAdapter = TerminalAdapter & {
+  readonly kind: "cash-dispenser";
+  dispense(
+    input: { amount: number; currencyCode: string },
+    context?: AdapterOperationContext
+  ): Promise<AdapterResult>;
+};
+
+export type CashAcceptorAdapter = TerminalAdapter & {
+  readonly kind: "cash-acceptor";
+  accept(
+    input: { expectedAmount?: number; currencyCode: string },
+    context?: AdapterOperationContext
+  ): Promise<AdapterResult>;
+};
+
+export type CardReaderAdapter = TerminalAdapter & {
+  readonly kind: "card-reader";
+  readCard(context?: AdapterOperationContext): Promise<AdapterResult>;
 };
 
 export type HostAuthorizationRequest = {
@@ -117,9 +160,12 @@ export type HostAuthorizationRequest = {
   chipRequired: boolean;
 };
 
-export type HostAuthorizationAdapter = {
-  readonly id: string;
-  authorize(request: HostAuthorizationRequest): Promise<AdapterResult>;
+export type HostAuthorizationAdapter = TerminalAdapter & {
+  readonly kind: "host-authorization";
+  authorize(
+    request: HostAuthorizationRequest,
+    context?: AdapterOperationContext
+  ): Promise<AdapterResult>;
 };
 
 export type TerminalAdapters = {
@@ -129,6 +175,96 @@ export type TerminalAdapters = {
   cardReader: CardReaderAdapter;
   hostAuthorization: HostAuthorizationAdapter;
 };
+
+export function validateTerminalAdapters(adapters: TerminalAdapters): ValidationIssue[] {
+  const expectedKinds: Record<keyof TerminalAdapters, AdapterKind> = {
+    receiptPrinter: "receipt-printer",
+    cashDispenser: "cash-dispenser",
+    cashAcceptor: "cash-acceptor",
+    cardReader: "card-reader",
+    hostAuthorization: "host-authorization"
+  };
+  const issues: ValidationIssue[] = [];
+  const ids = new Set<string>();
+  const allowedCapabilities: Record<AdapterKind, readonly string[]> = {
+    "receipt-printer": ["status", "print"],
+    "cash-dispenser": ["dispense", "finite-inventory"],
+    "cash-acceptor": ["accept", "amount-confirmation", "recycling"],
+    "card-reader": ["read", "contact", "contactless", "chip", "magstripe"],
+    "host-authorization": ["authorize", "reversal", "advice"]
+  };
+  const requiredOperations: Record<keyof TerminalAdapters, readonly string[]> = {
+    receiptPrinter: ["getStatus", "printReceipt"],
+    cashDispenser: ["dispense"],
+    cashAcceptor: ["accept"],
+    cardReader: ["readCard"],
+    hostAuthorization: ["authorize"]
+  };
+  const requiredCapabilities: Record<keyof TerminalAdapters, readonly string[]> = {
+    receiptPrinter: ["status", "print"],
+    cashDispenser: ["dispense"],
+    cashAcceptor: ["accept"],
+    cardReader: ["read"],
+    hostAuthorization: ["authorize"]
+  };
+
+  for (const [slot, expectedKind] of Object.entries(expectedKinds) as Array<
+    [keyof TerminalAdapters, AdapterKind]
+  >) {
+    const adapter = adapters[slot];
+    if (!adapter.id.trim()) {
+      issues.push({ field: slot, message: "Adapter id is required." });
+    } else if (ids.has(adapter.id)) {
+      issues.push({ field: slot, message: `Duplicate adapter id: ${adapter.id}.` });
+    } else {
+      ids.add(adapter.id);
+    }
+    if (adapter.kind !== expectedKind) {
+      issues.push({
+        field: slot,
+        message: `Expected adapter kind ${expectedKind}, received ${adapter.kind}.`
+      });
+    }
+    const capabilities = adapter.capabilities;
+    if (
+      capabilities.some((capability) => !capability.trim()) ||
+      new Set(capabilities).size !== capabilities.length
+    ) {
+      issues.push({
+        field: slot,
+        message: "Adapter capabilities must be non-empty and unique."
+      });
+    }
+    const allowed = allowedCapabilities[expectedKind];
+    for (const capability of capabilities) {
+      if (!allowed.includes(capability)) {
+        issues.push({
+          field: slot,
+          message: `Unsupported ${expectedKind} capability: ${capability}.`
+        });
+      }
+    }
+    for (const capability of requiredCapabilities[slot]) {
+      if (!capabilities.includes(capability)) {
+        issues.push({
+          field: slot,
+          message: `Required capability missing: ${capability}.`
+        });
+      }
+    }
+    const adapterRecord = adapter as unknown as Record<string, unknown>;
+    for (const operation of requiredOperations[slot]) {
+      if (typeof adapterRecord[operation] !== "function") {
+        issues.push({
+          field: slot,
+          message: `Required adapter operation missing: ${operation}.`
+        });
+      }
+    }
+  }
+
+  return issues;
+}
 
 export type ModuleHandler = () => void | boolean | Promise<void | boolean>;
 

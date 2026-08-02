@@ -59,6 +59,7 @@ export default defineFlow(
 
     async function OnIdle(): Promise<void> {
       await Idle.Execute();
+      await CoreSession.RefreshReceiptPrinterStatus();
       ReEnableMoreTime();
 
       const cardless = Customer.CustomerType === "TOUCH";
@@ -95,6 +96,7 @@ export default defineFlow(
         if (!receiptWarningOffered && isReceiptPrinterUnavailable()) {
           Cashblocks.ScratchPad.Set("ReceiptWarningOffered", true);
           if (!(await OfferReceiptWarning())) {
+            CoreSession.CancelTransaction("receipt_unavailable");
             return;
           }
         }
@@ -107,6 +109,7 @@ export default defineFlow(
 
         if (transaction === "CardlessWithdrawal") {
           if ((await Customer.SelectOption("CardlessAccess", "Continue,Cancel")) === "Cancel") {
+            CoreSession.CancelTransaction("cardless_access_cancelled", transaction);
             return;
           }
           CoreSession.CurrentAccount = await Customer.SelectAccount(["Checking", "Savings"]);
@@ -118,6 +121,7 @@ export default defineFlow(
             allowCustom: true
           });
           if ((await Customer.SelectOption("CardlessWithdrawalConfirm", "Confirm,CANCEL")) === "CANCEL") {
+            CoreSession.CancelTransaction("cardless_withdrawal_confirmation_cancelled", transaction);
             return;
           }
           CoreSession.LastTransactionAmount = CardlessCashWithdrawal.Amount;
@@ -137,6 +141,7 @@ export default defineFlow(
             allowCustom: true
           });
           if ((await Customer.SelectOption("WithdrawalConfirm", "Confirm,CANCEL")) === "CANCEL") {
+            CoreSession.CancelTransaction("withdrawal_confirmation_cancelled", transaction);
             return;
           }
           CoreSession.LastTransactionAmount = CashWithdrawal.Amount;
@@ -162,6 +167,7 @@ export default defineFlow(
             allowCustom: true
           });
           if ((await Customer.SelectOption("DepositInsertCash", "CashInserted,CANCEL")) === "CANCEL") {
+            CoreSession.CancelTransaction("deposit_cash_not_inserted", transaction);
             return;
           }
           CoreSession.LastTransactionAmount = CashDeposit.ExpectedAmount;
@@ -175,6 +181,7 @@ export default defineFlow(
           FastCash.AmountSelector.AmountPreset = 100;
           FastCash.Amount = FastCash.AmountSelector.AmountPreset;
           if ((await Customer.SelectOption("FastCashConfirm", "Withdraw100,Cancel")) === "Cancel") {
+            CoreSession.CancelTransaction("fast_cash_confirmation_cancelled", transaction);
             return;
           }
           CoreSession.LastTransactionAmount = FastCash.Amount;

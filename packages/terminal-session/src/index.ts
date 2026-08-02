@@ -1,5 +1,6 @@
 import { runFlow, type FlowGlobals, type FlowModule } from "../../flow-sdk/src/index.js";
 import type {
+  CustomerPrompt,
   CustomerType,
   FlowPackage,
   RuntimeEvent
@@ -23,6 +24,7 @@ export type TerminalSessionRequest = {
   acceptorOffline?: boolean;
   cardReaderOffline?: boolean;
   receiptWarningAnswer?: "YES" | "NO";
+  transactionOptionAnswers?: string[];
   journalPath?: string;
 };
 
@@ -40,15 +42,50 @@ export type TerminalSessionManagerOptions<Summary> = {
   summarizeEvents(events: RuntimeEvent[], flowOk: boolean): Summary;
   includeEvents?: boolean;
   defaultTransaction?: string;
+  maxSessions?: number;
+  sessionTtlMs?: number;
+  now?: () => number;
   configure?(globals: FlowGlobals, request: TerminalSessionRequest): void;
+};
+
+export type SerializedCustomerPrompt = CustomerPrompt & {
+  id: string;
+};
+
+export type TerminalSessionState<Summary> = {
+  sessionId: string;
+  prompt?: SerializedCustomerPrompt;
+  completed: boolean;
+  manifest: FlowPackage;
+  summary: Summary;
+  events?: RuntimeEvent[];
 };
 
 export class TerminalSessionManager<Summary> {
   private readonly sessions = new Map<string, InteractiveSession>();
+  private readonly lastAccess = new Map<string, number>();
+  private readonly maxSessions: number;
+  private readonly sessionTtlMs: number;
+  private readonly now: () => number;
 
-  constructor(private readonly options: TerminalSessionManagerOptions<Summary>) {}
+  constructor(private readonly options: TerminalSessionManagerOptions<Summary>) {
+    this.maxSessions = options.maxSessions ?? Number.MAX_SAFE_INTEGER;
+    this.sessionTtlMs = options.sessionTtlMs ?? Number.MAX_SAFE_INTEGER;
+    this.now = options.now ?? Date.now;
+    if (!Number.isSafeInteger(this.maxSessions) || this.maxSessions <= 0) {
+      throw new Error("maxSessions must be a positive safe integer.");
+    }
+    if (!Number.isSafeInteger(this.sessionTtlMs) || this.sessionTtlMs <= 0) {
+      throw new Error("sessionTtlMs must be a positive safe integer.");
+    }
+  }
 
   start(request: TerminalSessionRequest): InteractiveSession {
+    this.pruneExpired();
+    this.removeCompleted();
+    if (this.sessions.size >= this.maxSessions) {
+      throw new TerminalSessionCapacityError(this.maxSessions);
+    }
     const interaction = new QueuedCustomerInteraction();
     const runtime = new CashblocksRuntime({
       interaction,
@@ -81,27 +118,40 @@ export class TerminalSessionManager<Summary> {
     });
     session.resultPromise.catch(() => undefined);
     this.sessions.set(id, session);
+    this.lastAccess.set(id, this.now());
     return session;
   }
 
   answer(input: { sessionId: string; promptId: string; value: string }): boolean {
+    this.pruneExpired();
     const session = this.sessions.get(input.sessionId);
     if (!session) {
       return false;
     }
+    this.lastAccess.set(input.sessionId, this.now());
     return session.interaction.answer(input.promptId, input.value);
   }
 
   get(sessionId: string): InteractiveSession | undefined {
-    return this.sessions.get(sessionId);
+    this.pruneExpired();
+    const session = this.sessions.get(sessionId);
+    if (session) {
+      this.lastAccess.set(sessionId, this.now());
+    }
+    return session;
   }
 
-  async state(session: InteractiveSession): Promise<Record<string, unknown>> {
+  async state(session: InteractiveSession): Promise<TerminalSessionState<Summary>> {
+    this.pruneExpired();
+    if (!this.sessions.has(session.id)) {
+      throw new Error("Interactive session has expired.");
+    }
+    this.lastAccess.set(session.id, this.now());
     await waitForPromptOrResult(session);
     const events = session.runtime.Journal.all();
     const ok = session.result?.ok ?? !events.some((event) => event.type === "flow.failed");
 
-    return {
+    const state: TerminalSessionState<Summary> = {
       sessionId: session.id,
       prompt: serializePrompt(session.interaction.current()),
       completed: Boolean(session.result),
@@ -109,6 +159,49 @@ export class TerminalSessionManager<Summary> {
       summary: this.options.summarizeEvents(events, ok),
       ...(this.options.includeEvents ? { events } : {})
     };
+    if (state.completed) {
+      this.remove(session.id);
+    }
+    return state;
+  }
+
+  pruneExpired(): number {
+    const cutoff = this.now() - this.sessionTtlMs;
+    let removed = 0;
+    for (const [sessionId, accessedAt] of this.lastAccess) {
+      if (accessedAt <= cutoff) {
+        this.sessions.delete(sessionId);
+        this.lastAccess.delete(sessionId);
+        removed += 1;
+      }
+    }
+    return removed;
+  }
+
+  get size(): number {
+    this.pruneExpired();
+    this.removeCompleted();
+    return this.sessions.size;
+  }
+
+  private removeCompleted(): void {
+    for (const [sessionId, session] of this.sessions) {
+      if (session.result) {
+        this.remove(sessionId);
+      }
+    }
+  }
+
+  private remove(sessionId: string): void {
+    this.sessions.delete(sessionId);
+    this.lastAccess.delete(sessionId);
+  }
+}
+
+export class TerminalSessionCapacityError extends Error {
+  constructor(readonly capacity: number) {
+    super(`Terminal session capacity of ${capacity} has been reached.`);
+    this.name = "TerminalSessionCapacityError";
   }
 }
 
@@ -116,11 +209,16 @@ export function buildSimulatorOptions(
   request: TerminalSessionRequest,
   defaultTransaction = "BalanceInquiry"
 ): RuntimeSimulatorOptions {
+  const optionSelections = [
+    ...(request.receiptPrinterOut ? [request.receiptWarningAnswer ?? "YES"] : []),
+    ...(request.transactionOptionAnswers ?? [])
+  ];
+
   return {
     customerSelections: [request.transaction ?? defaultTransaction],
     accountSelections: [request.account ?? "Checking"],
     amountSelections: [request.amount ?? 100],
-    optionSelections: [request.receiptWarningAnswer ?? "YES"],
+    optionSelections,
     receiptPrinter: request.receiptPrinterOut
       ? { health: "DEGRADED", paper: "OUT" }
       : { health: "HEALTHY", paper: "OK" },
@@ -147,7 +245,7 @@ async function waitForPromptOrResult(session: InteractiveSession): Promise<void>
   ]);
 }
 
-function serializePrompt(prompt?: PendingCustomerPrompt): Record<string, unknown> | undefined {
+function serializePrompt(prompt?: PendingCustomerPrompt): SerializedCustomerPrompt | undefined {
   if (!prompt) {
     return undefined;
   }

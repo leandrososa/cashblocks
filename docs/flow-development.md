@@ -79,6 +79,21 @@ Assert both the returned result and journal events. For software failures, attac
 a diagnostic logger and assert the technical log entry separately from
 `flow.failed`.
 
+Browser-session simulations can queue answers for transaction-specific option
+prompts:
+
+```ts
+await runSimulation({
+  transaction: "CashWithdrawal",
+  transactionOptionAnswers: ["CANCEL"]
+});
+```
+
+When a flow exits because of a customer decision, call
+`CoreSession.CancelTransaction(reason, transaction)`. This appends a
+`transaction.cancelled` event so journal consumers can distinguish cancellation
+from an idle or incomplete session.
+
 ## Flow Boundary Rules
 
 - Flow code decides ordering and customer-specific policy.

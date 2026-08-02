@@ -20,34 +20,27 @@ flow architecture, and adapter boundaries.
 | Diagnostic logging contracts | Done |
 | Simulator account balances and terminal cash | Done |
 | Introductory developer docs | Done |
-
-## Next Priority
-
-| Area | Goal |
-| --- | --- |
-| Documentation | Expand API reference and cookbook examples. |
-| Flow testing | Add more examples for cancellation, warnings, and device faults. |
-| Simulator profiles | Model richer device and cash-management capabilities without binding to vendors. |
-| Observability | Add configurable diagnostic log sinks and correlation conventions. |
-| Adapter design | Refine contracts before real hardware integrations. |
-
-## Planned Later
-
-| Area | Direction |
-| --- | --- |
-| Host integrations | ISO8583 or legacy-host adapters behind runtime contracts. |
-| Device integrations | XFS, J/XFS, XFS4IoT, or vendor adapters behind device contracts. |
-| Native packaging | Wrap the shell/runtime for local terminal environments. |
-| Replay tooling | Use durable journals to inspect and replay runtime sessions. |
-| Certification support | Add stricter recovery, audit, and test harnesses once real targets exist. |
+| API reference and cookbook | Done |
+| Cancellation, warning, and device-fault flow tests | Done |
+| Capability and cash-management simulator profiles | Done |
+| Configurable diagnostic sinks and correlation conventions | Done |
+| Validated adapter identity, capabilities, and operation context | Done |
+| Transport-independent ISO8583 authorization adapter | Done |
+| TLS-framed host integration primitives, durable STANs, and reversal recovery | Done |
+| Vendor-neutral device gateway adapters | Done |
+| Secure WebSocket device transport and recovery policy | Done |
+| Native customer-terminal executable packaging | Done |
+| Side-effect-free journal validation and replay | Done |
+| Deterministic certification and recovery harness | Done |
 
 ## Outside the MVP
 
 | Area | Reason |
 | --- | --- |
 | Certification-grade XFS/J-XFS implementations | Requires hardware, vendor service providers, and deployment targets. |
-| Production ISO8583 host stack | Requires host specs, security requirements, keys, and network certification. |
+| Certified, host-specific ISO8583 stack | The transport and recovery primitives are present; field dictionaries, MACs, keys, host messages, and certification require an actual host specification. |
 | Vendor-specific behavior | Should wait for device profiles, docs, or real devices. |
+| Signed OS installers and kiosk lockdown | Require target operating systems, signing identities, and fleet policy. |
 | Full observability platform | The current goal is a minimal diagnostic logging boundary. |
 
 The near-term product promise is not "runs every ATM." It is "makes ATM flow

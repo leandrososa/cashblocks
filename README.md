@@ -47,10 +47,24 @@ This writes JSONL journal events to `./data/demo.journal.jsonl`.
 - [Concepts](docs/concepts.md): runtime, flow packages, modules, adapters,
   journal, and diagnostic logs.
 - [Flow development](docs/flow-development.md): write and test flow packages.
+- [API reference](docs/api-reference.md): public contracts, classes, functions,
+  and package boundaries.
+- [Cookbook](docs/cookbook.md): focused recipes for flows, tests, adapters,
+  diagnostics, journals, and interactive sessions.
 - [Adapter development](docs/adapter-development.md): current adapter contracts,
   simulator boundaries, and hardware limits.
 - [Diagnostic logging](docs/diagnostic-logging.md): software logs separate from
   the runtime journal.
+- [ISO8583 host adapter](docs/host-iso8583.md): authorization codec, framed TLS
+  transport, durable STAN allocation, and reversal-intent recovery.
+- [Device gateway adapters](docs/device-gateway.md): secure WebSocket device
+  transport and adapters for printers, dispensers, acceptors, and card readers.
+- [Native packaging](docs/native-packaging.md): compile the customer terminal
+  into a local executable bundle with deployment-safe defaults.
+- [Journal replay](docs/journal-replay.md): validate durable JSONL and
+  reconstruct side-effect-free session state.
+- [Certification harness](docs/certification-harness.md): run deterministic
+  conformance, recovery, financial-invariant, and audit-evidence checks.
 - [Industry context](docs/industry-context.md): where XFS, J/XFS, XFS4IoT, and
   ISO8583 fit.
 - [Roadmap](docs/roadmap.md): what exists, what is next, and what is outside the
@@ -65,9 +79,19 @@ This writes JSONL journal events to `./data/demo.journal.jsonl`.
 - `packages/atm-modules`: reusable ATM transaction modules.
 - `packages/flow-sdk`: `defineFlow`, `runFlow`, and controlled runtime globals.
 - `packages/terminal-session`: shared paused-session runtime for browser apps.
+- `packages/host-iso8583`: ISO8583 authorization adapter plus TLS framing,
+  durable STANs, and reversal recovery primitives.
+- `packages/device-gateway`: adapters plus a bounded WebSocket transport for an
+  external device service or vendor bridge.
+- `packages/journal-replay`: journal validation, state projection, and replay
+  CLI.
+- `packages/certification-harness`: reusable conformance runner and the
+  simulator ATM certification profile.
 - `examples/atm-basic`: simulator-backed ATM flow package.
 - `apps/terminal-shell`: local browser shell for running and inspecting the demo.
-- `apps/customer-terminal`: full-screen customer-facing terminal simulation.
+- `apps/customer-terminal`: accessible bilingual customer terminal with
+  hardware card events, cardless access, and static campaign screensaver.
+- `apps/native-terminal`: native launcher, configuration, and package builder.
 
 ## Useful Commands
 
@@ -79,6 +103,9 @@ bun run example:atm
 bun run dev
 bun run customer
 bun run demo
+bun run package:native
+bun run replay -- ./data/runtime.journal.jsonl --pretty
+bun run certify -- --pretty
 ```
 
 Set `CASHBLOCKS_JOURNAL_PATH=./data/runtime.journal.jsonl` before `bun run dev`

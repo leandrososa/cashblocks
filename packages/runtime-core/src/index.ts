@@ -3,10 +3,13 @@ import { dirname } from "node:path";
 
 import type {
   AdapterResult,
+  AdapterOperationContext,
   CashAcceptorAdapter,
   CashDispenserAdapter,
   CardReaderAdapter,
+  DiagnosticCorrelation,
   DiagnosticLogEntry,
+  DiagnosticLogLevel,
   DiagnosticLogger,
   CustomerInteraction,
   CustomerPrompt,
@@ -24,6 +27,7 @@ import type {
   TerminalAdapters,
   TransactionResult
 } from "../../runtime-contracts/src/index.js";
+import { validateTerminalAdapters } from "../../runtime-contracts/src/index.js";
 
 export class MemoryScratchPad implements ScratchPad {
   private readonly values = new Map<string, JsonValue>();
@@ -105,8 +109,10 @@ export class ConsoleDiagnosticLogger implements DiagnosticLogger {
   log(entry: DiagnosticLogEntry): void {
     const output = {
       ts: entry.ts,
+      level: entry.level,
       source: entry.source,
       sessionId: entry.sessionId,
+      correlation: entry.correlation,
       message: entry.message,
       metadata: entry.metadata,
       error: entry.error
@@ -131,11 +137,141 @@ export class MemoryDiagnosticLogger implements DiagnosticLogger {
   private readonly entries: DiagnosticLogEntry[] = [];
 
   log(entry: DiagnosticLogEntry): void {
-    this.entries.push(entry);
+    this.entries.push(snapshotDiagnosticEntry(entry));
   }
 
   all(): DiagnosticLogEntry[] {
-    return [...this.entries];
+    return this.entries.map(snapshotDiagnosticEntry);
+  }
+}
+
+const diagnosticLevelRank: Record<DiagnosticLogLevel, number> = {
+  debug: 10,
+  info: 20,
+  warn: 30,
+  error: 40
+};
+
+export type DiagnosticLoggerConfiguration = {
+  sinks: DiagnosticLogger[];
+  minimumLevel?: DiagnosticLogLevel;
+  sources?: DiagnosticLogEntry["source"][];
+};
+
+export class CompositeDiagnosticLogger implements DiagnosticLogger {
+  constructor(private readonly sinks: DiagnosticLogger[]) {}
+
+  log(entry: DiagnosticLogEntry): void {
+    for (const sink of this.sinks) {
+      try {
+        const result = sink.log(snapshotDiagnosticEntry(entry)) as unknown;
+        ignoreAsyncDiagnosticFailure(result);
+      } catch {
+        // One diagnostic sink must not prevent delivery to the remaining sinks.
+      }
+    }
+  }
+}
+
+export class FilteredDiagnosticLogger implements DiagnosticLogger {
+  private readonly sources?: Set<DiagnosticLogEntry["source"]>;
+
+  constructor(
+    private readonly sink: DiagnosticLogger,
+    private readonly minimumLevel: DiagnosticLogLevel = "debug",
+    sources?: DiagnosticLogEntry["source"][]
+  ) {
+    this.sources = sources ? new Set(sources) : undefined;
+  }
+
+  log(entry: DiagnosticLogEntry): void {
+    if (diagnosticLevelRank[entry.level] < diagnosticLevelRank[this.minimumLevel]) {
+      return;
+    }
+    if (this.sources && !this.sources.has(entry.source)) {
+      return;
+    }
+    this.sink.log(snapshotDiagnosticEntry(entry));
+  }
+}
+
+export function createDiagnosticLogger(
+  configuration: DiagnosticLoggerConfiguration
+): DiagnosticLogger {
+  const composite = new CompositeDiagnosticLogger([...configuration.sinks]);
+  return new FilteredDiagnosticLogger(
+    composite,
+    configuration.minimumLevel,
+    configuration.sources
+  );
+}
+
+export class JsonlDiagnosticLogger implements DiagnosticLogger {
+  private readonly ready: Promise<void>;
+  private pending = Promise.resolve();
+  private writeError?: unknown;
+
+  constructor(private readonly filePath: string) {
+    this.ready = mkdir(dirname(filePath), { recursive: true }).then(
+      () => undefined,
+      (error: unknown) => {
+        this.writeError ??= error;
+      }
+    );
+  }
+
+  log(entry: DiagnosticLogEntry): void {
+    const snapshot = snapshotDiagnosticEntry(entry);
+    this.pending = this.pending.then(async () => {
+      try {
+        await this.ready;
+        if (this.writeError) {
+          return;
+        }
+        await appendFile(this.filePath, `${JSON.stringify(snapshot)}\n`, "utf8");
+      } catch (error) {
+        this.writeError ??= error;
+      }
+    });
+  }
+
+  async flush(): Promise<void> {
+    await this.ready;
+    await this.pending;
+    if (this.writeError) {
+      throw this.writeError;
+    }
+  }
+
+  async readAll(): Promise<DiagnosticLogEntry[]> {
+    await this.flush();
+    try {
+      const content = await readFile(this.filePath, "utf8");
+      return content
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => JSON.parse(line) as DiagnosticLogEntry);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        return [];
+      }
+      throw error;
+    }
+  }
+}
+
+function snapshotDiagnosticEntry(entry: DiagnosticLogEntry): DiagnosticLogEntry {
+  return structuredClone(entry);
+}
+
+function ignoreAsyncDiagnosticFailure(result: unknown): void {
+  if (
+    result !== null &&
+    (typeof result === "object" || typeof result === "function") &&
+    "then" in result &&
+    typeof result.then === "function"
+  ) {
+    void Promise.resolve(result as PromiseLike<unknown>).catch(() => undefined);
   }
 }
 
@@ -194,7 +330,261 @@ export class HandlerRegistry {
   }
 }
 
+export type SimulatorCashManagement = {
+  dispenseDenominations: number[];
+  acceptDenominations: number[];
+  initialInventory: Record<string, number>;
+  maxDispenseAmount: number;
+  maxDepositAmount: number;
+  recycleDeposits: boolean;
+};
+
+export type SimulatorProfile = {
+  id: string;
+  currencyCode: string;
+  capabilities: {
+    receiptPrinter: boolean;
+    cashDispenser: boolean;
+    cashAcceptor: boolean;
+    cardReader: boolean;
+    hostAuthorization: boolean;
+  };
+  cashManagement: SimulatorCashManagement;
+};
+
+export const MAX_SIMULATOR_TRANSACTION_AMOUNT = 100_000;
+export const MAX_SIMULATOR_CASH_UNIT_COUNT = 10_000;
+export const MAX_SIMULATOR_DENOMINATION_COUNT = 32;
+
+export const DEFAULT_SIMULATOR_PROFILE: SimulatorProfile = {
+  id: "cashblocks.default",
+  currencyCode: "AUD",
+  capabilities: {
+    receiptPrinter: true,
+    cashDispenser: true,
+    cashAcceptor: true,
+    cardReader: true,
+    hostAuthorization: true
+  },
+  cashManagement: {
+    dispenseDenominations: [10, 20, 50, 100],
+    acceptDenominations: [10, 20, 50, 100],
+    initialInventory: {
+      "10": 10,
+      "20": 20,
+      "50": 10,
+      "100": 40
+    },
+    maxDispenseAmount: 1000,
+    maxDepositAmount: 5000,
+    recycleDeposits: true
+  }
+};
+
+export function defineSimulatorProfile(profile: SimulatorProfile): SimulatorProfile {
+  if (!profile.id.trim()) {
+    throw new Error("Simulator profile id is required.");
+  }
+  if (!profile.currencyCode.trim()) {
+    throw new Error("Simulator profile currencyCode is required.");
+  }
+
+  validateDenominations(
+    profile.cashManagement.dispenseDenominations,
+    "dispenseDenominations"
+  );
+  validateDenominations(
+    profile.cashManagement.acceptDenominations,
+    "acceptDenominations"
+  );
+  validatePositiveAmount(profile.cashManagement.maxDispenseAmount, "maxDispenseAmount");
+  validatePositiveAmount(profile.cashManagement.maxDepositAmount, "maxDepositAmount");
+
+  const dispenseDenominations = new Set(profile.cashManagement.dispenseDenominations);
+  for (const [rawDenomination, count] of Object.entries(
+    profile.cashManagement.initialInventory
+  )) {
+    const denomination = Number(rawDenomination);
+    if (rawDenomination !== String(denomination)) {
+      throw new Error(
+        `Simulator profile inventory key ${rawDenomination} must be canonical.`
+      );
+    }
+    if (!dispenseDenominations.has(denomination)) {
+      throw new Error(
+        `Simulator profile inventory denomination ${rawDenomination} is not dispensable.`
+      );
+    }
+    if (
+      !Number.isSafeInteger(count) ||
+      count < 0 ||
+      count > MAX_SIMULATOR_CASH_UNIT_COUNT
+    ) {
+      throw new Error(
+        `Simulator profile inventory count for ${rawDenomination} must be between 0 and ${MAX_SIMULATOR_CASH_UNIT_COUNT}.`
+      );
+    }
+  }
+  for (const denomination of dispenseDenominations) {
+    if (!(String(denomination) in profile.cashManagement.initialInventory)) {
+      throw new Error(
+        `Simulator profile inventory must include denomination ${denomination}.`
+      );
+    }
+  }
+  if (
+    profile.cashManagement.recycleDeposits &&
+    profile.cashManagement.acceptDenominations.some(
+      (denomination) => !dispenseDenominations.has(denomination)
+    )
+  ) {
+    throw new Error(
+      "Simulator profile recycled accept denominations must also be dispensable."
+    );
+  }
+
+  inventoryTotal(profile.cashManagement.initialInventory);
+
+  return {
+    id: profile.id,
+    currencyCode: profile.currencyCode,
+    capabilities: { ...profile.capabilities },
+    cashManagement: {
+      dispenseDenominations: [...profile.cashManagement.dispenseDenominations],
+      acceptDenominations: [...profile.cashManagement.acceptDenominations],
+      initialInventory: { ...profile.cashManagement.initialInventory },
+      maxDispenseAmount: profile.cashManagement.maxDispenseAmount,
+      maxDepositAmount: profile.cashManagement.maxDepositAmount,
+      recycleDeposits: profile.cashManagement.recycleDeposits
+    }
+  };
+}
+
+function validateDenominations(denominations: number[], field: string): void {
+  if (denominations.length === 0) {
+    throw new Error(`Simulator profile ${field} must not be empty.`);
+  }
+  if (denominations.length > MAX_SIMULATOR_DENOMINATION_COUNT) {
+    throw new Error(
+      `Simulator profile ${field} must contain at most ${MAX_SIMULATOR_DENOMINATION_COUNT} values.`
+    );
+  }
+  if (
+    denominations.some(
+      (denomination) => !Number.isSafeInteger(denomination) || denomination <= 0
+    )
+  ) {
+    throw new Error(
+      `Simulator profile ${field} values must be positive safe integers.`
+    );
+  }
+  if (new Set(denominations).size !== denominations.length) {
+    throw new Error(`Simulator profile ${field} values must be unique.`);
+  }
+}
+
+function validatePositiveAmount(amount: number, field: string): void {
+  if (
+    !Number.isSafeInteger(amount) ||
+    amount <= 0 ||
+    amount > MAX_SIMULATOR_TRANSACTION_AMOUNT
+  ) {
+    throw new Error(
+      `Simulator profile ${field} must be between 1 and ${MAX_SIMULATOR_TRANSACTION_AMOUNT}.`
+    );
+  }
+}
+
+function inventoryTotal(inventory: Record<string, number>): number {
+  const total = Object.entries(inventory).reduce(
+    (total, [denomination, count]) => total + Number(denomination) * count,
+    0
+  );
+  if (!Number.isSafeInteger(total)) {
+    throw new Error("Simulator profile inventory total must be a safe integer.");
+  }
+  return total;
+}
+
+function allocateCash(
+  amount: number,
+  denominations: number[],
+  inventory?: Record<string, number>
+): Record<string, number> | undefined {
+  if (
+    !Number.isSafeInteger(amount) ||
+    amount <= 0 ||
+    amount > MAX_SIMULATOR_TRANSACTION_AMOUNT
+  ) {
+    return undefined;
+  }
+
+  const bundles: Array<{
+    denomination: number;
+    count: number;
+    value: number;
+  }> = [];
+
+  for (const denomination of denominations) {
+    let remainingCount = Math.min(
+      Math.floor(amount / denomination),
+      inventory?.[String(denomination)] ?? MAX_SIMULATOR_CASH_UNIT_COUNT
+    );
+    let bundleSize = 1;
+    while (remainingCount > 0) {
+      const count = Math.min(bundleSize, remainingCount);
+      bundles.push({
+        denomination,
+        count,
+        value: denomination * count
+      });
+      remainingCount -= count;
+      bundleSize *= 2;
+    }
+  }
+
+  const previousAmount = new Int32Array(amount + 1);
+  const selectedBundle = new Int32Array(amount + 1);
+  previousAmount.fill(-1);
+  selectedBundle.fill(-1);
+  previousAmount[0] = 0;
+
+  for (let bundleIndex = 0; bundleIndex < bundles.length; bundleIndex += 1) {
+    const bundle = bundles[bundleIndex];
+    if (!bundle) {
+      continue;
+    }
+    for (let current = amount; current >= bundle.value; current -= 1) {
+      if (
+        previousAmount[current] === -1 &&
+        previousAmount[current - bundle.value] !== -1
+      ) {
+        previousAmount[current] = current - bundle.value;
+        selectedBundle[current] = bundleIndex;
+      }
+    }
+  }
+
+  if (previousAmount[amount] === -1) {
+    return undefined;
+  }
+
+  const allocation: Record<string, number> = {};
+  let current = amount;
+  while (current > 0) {
+    const bundle = bundles[selectedBundle[current] ?? -1];
+    if (!bundle) {
+      return undefined;
+    }
+    const denomination = String(bundle.denomination);
+    allocation[denomination] = (allocation[denomination] ?? 0) + bundle.count;
+    current = previousAmount[current] ?? -1;
+  }
+  return allocation;
+}
+
 export type RuntimeSimulatorOptions = {
+  profile?: SimulatorProfile;
   customerSelections?: string[];
   optionSelections?: string[];
   accountSelections?: string[];
@@ -215,6 +605,10 @@ export class RuntimeSimulator {
   private accountSelections: string[];
   private amountSelections: number[];
   private pinEntries: string[];
+  private readonly cashInventory: Record<string, number>;
+  private readonly finiteCashInventory: boolean;
+  readonly usesLegacyScalarCash: boolean;
+  readonly profile: SimulatorProfile;
   accounts: Record<string, number>;
   terminalCash: number;
   receiptPrinter: ReceiptPrinterStatus;
@@ -224,6 +618,12 @@ export class RuntimeSimulator {
   cardReaderOnline: boolean;
 
   constructor(options: RuntimeSimulatorOptions = {}) {
+    if (options.profile && options.terminalCash !== undefined) {
+      throw new Error(
+        "RuntimeSimulator options cannot combine profile with terminalCash."
+      );
+    }
+    this.profile = defineSimulatorProfile(options.profile ?? DEFAULT_SIMULATOR_PROFILE);
     this.customerSelections = [...(options.customerSelections ?? ["BalanceInquiry"])];
     this.optionSelections = [...(options.optionSelections ?? ["YES"])];
     this.accountSelections = [...(options.accountSelections ?? ["Checking"])];
@@ -235,7 +635,16 @@ export class RuntimeSimulator {
       Credit: -320,
       ...(options.accounts ?? {})
     };
-    this.terminalCash = options.terminalCash ?? 5000;
+    this.usesLegacyScalarCash = options.terminalCash !== undefined;
+    this.finiteCashInventory = !this.usesLegacyScalarCash;
+    this.cashInventory = this.finiteCashInventory
+      ? { ...this.profile.cashManagement.initialInventory }
+      : {};
+    this.terminalCash =
+      options.terminalCash ?? inventoryTotal(this.cashInventory);
+    if (!Number.isSafeInteger(this.terminalCash) || this.terminalCash < 0) {
+      throw new Error("RuntimeSimulator terminalCash must be a non-negative safe integer.");
+    }
     this.receiptPrinter = {
       health: options.receiptPrinter?.health ?? "HEALTHY",
       paper: options.receiptPrinter?.paper ?? "OK"
@@ -288,17 +697,105 @@ export class RuntimeSimulator {
   }
 
   removeTerminalCash(amount: number): { before: number; after: number } {
+    const allocation = this.planDispense(amount);
+    if (!allocation) {
+      throw new Error(`Simulator cannot dispense ${amount} ${this.profile.currencyCode}.`);
+    }
     const before = this.terminalCash;
     const after = before - amount;
+    if (this.finiteCashInventory) {
+      for (const [denomination, count] of Object.entries(allocation)) {
+        this.cashInventory[denomination] =
+          (this.cashInventory[denomination] ?? 0) - count;
+      }
+    }
     this.terminalCash = after;
     return { before, after };
   }
 
   addTerminalCash(amount: number): { before: number; after: number } {
+    if (!this.canAddTerminalCash(amount)) {
+      throw new Error(
+        `Simulator cannot add ${amount} ${this.profile.currencyCode} without exceeding safe cash capacity.`
+      );
+    }
     const before = this.terminalCash;
     const after = before + amount;
+    if (
+      this.finiteCashInventory &&
+      this.profile.cashManagement.recycleDeposits
+    ) {
+      const allocation = allocateCash(
+        amount,
+        this.profile.cashManagement.acceptDenominations
+      );
+      if (allocation) {
+        for (const [denomination, count] of Object.entries(allocation)) {
+          this.cashInventory[denomination] =
+            (this.cashInventory[denomination] ?? 0) + count;
+        }
+      }
+    }
     this.terminalCash = after;
     return { before, after };
+  }
+
+  planDispense(amount: number): Record<string, number> | undefined {
+    if (!Number.isSafeInteger(amount) || amount <= 0) {
+      return undefined;
+    }
+    if (!this.finiteCashInventory) {
+      return amount <= this.terminalCash ? {} : undefined;
+    }
+    return allocateCash(
+      amount,
+      this.profile.cashManagement.dispenseDenominations,
+      this.cashInventory
+    );
+  }
+
+  canAccept(amount: number): boolean {
+    if (!Number.isSafeInteger(amount) || amount <= 0) {
+      return false;
+    }
+    return Boolean(
+      allocateCash(amount, this.profile.cashManagement.acceptDenominations)
+    );
+  }
+
+  canAddTerminalCash(amount: number): boolean {
+    if (!Number.isSafeInteger(amount) || amount < 0) {
+      return false;
+    }
+    if (!Number.isSafeInteger(this.terminalCash + amount)) {
+      return false;
+    }
+    if (
+      !this.finiteCashInventory ||
+      !this.profile.cashManagement.recycleDeposits ||
+      amount === 0
+    ) {
+      return true;
+    }
+
+    const allocation = allocateCash(
+      amount,
+      this.profile.cashManagement.acceptDenominations
+    );
+    if (!allocation) {
+      return false;
+    }
+    return Object.entries(allocation).every(([denomination, count]) => {
+      const nextCount = (this.cashInventory[denomination] ?? 0) + count;
+      return (
+        Number.isSafeInteger(nextCount) &&
+        nextCount <= MAX_SIMULATOR_CASH_UNIT_COUNT
+      );
+    });
+  }
+
+  cashInventorySnapshot(): Record<string, number> {
+    return { ...this.cashInventory };
   }
 }
 
@@ -387,10 +884,15 @@ function adapterResult(ok: boolean, code: string, message: string): AdapterResul
 
 export class SimulatedReceiptPrinterAdapter implements ReceiptPrinterAdapter {
   readonly id = "simulated-receipt-printer";
+  readonly kind = "receipt-printer" as const;
+  readonly capabilities = ["status", "print"] as const;
 
   constructor(private readonly simulator: RuntimeSimulator) {}
 
   async getStatus(): Promise<ReceiptPrinterStatus> {
+    if (!this.simulator.profile.capabilities.receiptPrinter) {
+      return { health: "MISSING", paper: "OUT" };
+    }
     return this.simulator.receiptPrinter;
   }
 
@@ -405,15 +907,38 @@ export class SimulatedReceiptPrinterAdapter implements ReceiptPrinterAdapter {
 
 export class SimulatedCashDispenserAdapter implements CashDispenserAdapter {
   readonly id = "simulated-cash-dispenser";
+  readonly kind = "cash-dispenser" as const;
+  readonly capabilities = ["dispense", "finite-inventory"] as const;
 
   constructor(private readonly simulator: RuntimeSimulator) {}
 
   async dispense(input: { amount: number; currencyCode: string }): Promise<AdapterResult> {
+    if (!this.simulator.profile.capabilities.cashDispenser) {
+      return adapterResult(false, "DISPENSER_UNAVAILABLE", "Cash dispenser is not supported.");
+    }
     if (!this.simulator.dispenserOnline) {
       return adapterResult(false, "DISPENSER_OFFLINE", "Cash dispenser is offline.");
     }
+    if (!Number.isSafeInteger(input.amount) || input.amount <= 0) {
+      return adapterResult(false, "INVALID_AMOUNT", "Dispense amount must be a positive safe integer.");
+    }
+    if (!this.simulator.usesLegacyScalarCash) {
+      if (input.currencyCode !== this.simulator.profile.currencyCode) {
+        return adapterResult(false, "UNSUPPORTED_CURRENCY", "Currency is not supported.");
+      }
+      if (input.amount > this.simulator.profile.cashManagement.maxDispenseAmount) {
+        return adapterResult(false, "DISPENSE_LIMIT_EXCEEDED", "Dispense limit exceeded.");
+      }
+    }
     if (input.amount > this.simulator.terminalCash) {
       return adapterResult(false, "INSUFFICIENT_TERMINAL_CASH", "Terminal does not have enough cash.");
+    }
+    if (!this.simulator.planDispense(input.amount)) {
+      return adapterResult(
+        false,
+        "DENOMINATION_UNAVAILABLE",
+        "Requested amount cannot be dispensed from available cash units."
+      );
     }
     const cash = this.simulator.removeTerminalCash(input.amount);
     return {
@@ -427,14 +952,44 @@ export class SimulatedCashDispenserAdapter implements CashDispenserAdapter {
 
 export class SimulatedCashAcceptorAdapter implements CashAcceptorAdapter {
   readonly id = "simulated-cash-acceptor";
+  readonly kind = "cash-acceptor" as const;
+  readonly capabilities = ["accept", "amount-confirmation"] as const;
 
   constructor(private readonly simulator: RuntimeSimulator) {}
 
   async accept(input: { expectedAmount?: number; currencyCode: string }): Promise<AdapterResult> {
+    if (!this.simulator.profile.capabilities.cashAcceptor) {
+      return adapterResult(false, "ACCEPTOR_UNAVAILABLE", "Cash acceptor is not supported.");
+    }
     if (!this.simulator.acceptorOnline) {
       return adapterResult(false, "ACCEPTOR_OFFLINE", "Cash acceptor is offline.");
     }
     const amount = input.expectedAmount ?? 0;
+    if (this.simulator.usesLegacyScalarCash) {
+      if (!Number.isSafeInteger(amount) || amount < 0) {
+        return adapterResult(false, "INVALID_AMOUNT", "Deposit amount must be a non-negative safe integer.");
+      }
+    } else {
+      if (!Number.isSafeInteger(amount) || amount <= 0) {
+        return adapterResult(false, "INVALID_AMOUNT", "Deposit amount must be a positive safe integer.");
+      }
+      if (input.currencyCode !== this.simulator.profile.currencyCode) {
+        return adapterResult(false, "UNSUPPORTED_CURRENCY", "Currency is not supported.");
+      }
+      if (amount > this.simulator.profile.cashManagement.maxDepositAmount) {
+        return adapterResult(false, "DEPOSIT_LIMIT_EXCEEDED", "Deposit limit exceeded.");
+      }
+      if (!this.simulator.canAccept(amount)) {
+        return adapterResult(
+          false,
+          "DENOMINATION_UNAVAILABLE",
+          "Deposit amount cannot be represented by accepted denominations."
+        );
+      }
+    }
+    if (!this.simulator.canAddTerminalCash(amount)) {
+      return adapterResult(false, "CASH_CAPACITY_EXCEEDED", "Terminal cash capacity exceeded.");
+    }
     const cash = this.simulator.addTerminalCash(amount);
     return {
       ok: true,
@@ -451,10 +1006,15 @@ export class SimulatedCashAcceptorAdapter implements CashAcceptorAdapter {
 
 export class SimulatedCardReaderAdapter implements CardReaderAdapter {
   readonly id = "simulated-card-reader";
+  readonly kind = "card-reader" as const;
+  readonly capabilities = ["read"] as const;
 
   constructor(private readonly simulator: RuntimeSimulator) {}
 
   async readCard(): Promise<AdapterResult> {
+    if (!this.simulator.profile.capabilities.cardReader) {
+      return adapterResult(false, "CARD_READER_UNAVAILABLE", "Card reader is not supported.");
+    }
     if (!this.simulator.cardReaderOnline) {
       return adapterResult(false, "CARD_READER_OFFLINE", "Card reader is offline.");
     }
@@ -464,10 +1024,15 @@ export class SimulatedCardReaderAdapter implements CardReaderAdapter {
 
 export class SimulatedHostAuthorizationAdapter implements HostAuthorizationAdapter {
   readonly id = "simulated-host-authorization";
+  readonly kind = "host-authorization" as const;
+  readonly capabilities = ["authorize"] as const;
 
   constructor(private readonly simulator: RuntimeSimulator) {}
 
   async authorize(request: HostAuthorizationRequest): Promise<AdapterResult> {
+    if (!this.simulator.profile.capabilities.hostAuthorization) {
+      return adapterResult(false, "HOST_UNAVAILABLE", "Host authorization is not supported.");
+    }
     if (!this.simulator.hostApproved) {
       return {
         ok: false,
@@ -513,6 +1078,15 @@ export type CashblocksRuntimeOptions = {
   logger?: DiagnosticLogger;
   journalPath?: string;
   sessionId?: string;
+  adapterTimeoutMs?: number;
+};
+
+export type DiagnosticLogInput = Omit<
+  DiagnosticLogEntry,
+  "ts" | "sessionId" | "correlation"
+> & {
+  sessionId?: string;
+  correlation?: Partial<DiagnosticCorrelation>;
 };
 
 export class CashblocksRuntime {
@@ -524,11 +1098,21 @@ export class CashblocksRuntime {
   readonly Interaction: CustomerInteraction;
   readonly Logger: DiagnosticLogger;
   readonly SessionId: string;
+  readonly AdapterTimeoutMs: number;
   readonly Cashblocks: RuntimeApi;
+  private adapterOperationSequence = 0;
 
   constructor(options: CashblocksRuntimeOptions = {}) {
     this.Simulator = options.simulator ?? new RuntimeSimulator();
     this.Adapters = options.adapters ?? createSimulatedAdapters(this.Simulator);
+    const adapterIssues = validateTerminalAdapters(this.Adapters);
+    if (adapterIssues.length > 0) {
+      throw new Error(
+        `Invalid terminal adapters: ${adapterIssues
+          .map((issue) => `${issue.field}: ${issue.message}`)
+          .join("; ")}`
+      );
+    }
     this.Interaction = options.interaction ?? new SimulatorCustomerInteraction(this.Simulator);
     this.Logger = options.logger ?? new NoopDiagnosticLogger();
     this.Journal = new RuntimeJournal({
@@ -536,7 +1120,16 @@ export class CashblocksRuntime {
         ? new JsonlJournalPersistence(options.journalPath)
         : undefined
     });
-    this.SessionId = options.sessionId ?? `session-${Date.now()}`;
+    this.SessionId =
+      options.sessionId ?? `session-${globalThis.crypto.randomUUID()}`;
+    this.AdapterTimeoutMs = options.adapterTimeoutMs ?? 30_000;
+    if (
+      !Number.isSafeInteger(this.AdapterTimeoutMs) ||
+      this.AdapterTimeoutMs <= 0 ||
+      this.AdapterTimeoutMs > 300_000
+    ) {
+      throw new Error("adapterTimeoutMs must be an integer between 1 and 300000.");
+    }
 
     this.Cashblocks = {
       ScratchPad: this.ScratchPad,
@@ -570,8 +1163,18 @@ export class CashblocksRuntime {
       }
     };
 
-    this.Properties.Set("Devices.ReceiptPrinter.StDeviceStatus", this.Simulator.receiptPrinter.health);
-    this.Properties.Set("Devices.ReceiptPrinter.StPaperStatus", this.Simulator.receiptPrinter.paper);
+    this.Properties.Set(
+      "Devices.ReceiptPrinter.StDeviceStatus",
+      this.Simulator.profile.capabilities.receiptPrinter
+        ? this.Simulator.receiptPrinter.health
+        : "MISSING"
+    );
+    this.Properties.Set(
+      "Devices.ReceiptPrinter.StPaperStatus",
+      this.Simulator.profile.capabilities.receiptPrinter
+        ? this.Simulator.receiptPrinter.paper
+        : "OUT"
+    );
     this.Journal.append({ type: "runtime.started", source: "runtime" });
   }
 
@@ -584,12 +1187,39 @@ export class CashblocksRuntime {
     return details ? { ok, code, message, details } : { ok, code, message };
   }
 
-  logDiagnostic(entry: Omit<DiagnosticLogEntry, "ts" | "sessionId"> & { sessionId?: string }): void {
+  createAdapterOperationContext(
+    adapterId: string,
+    operation: string,
+    transactionName?: string,
+    signal: AbortSignal = new AbortController().signal
+  ): AdapterOperationContext {
+    this.adapterOperationSequence += 1;
+    const startedAt = new Date();
+    return {
+      operationId: `${this.SessionId}:adapter:${this.adapterOperationSequence}`,
+      sessionId: this.SessionId,
+      adapterId,
+      operation,
+      ...(transactionName ? { transactionName } : {}),
+      timeoutMs: this.AdapterTimeoutMs,
+      startedAt: startedAt.toISOString(),
+      deadlineAt: new Date(startedAt.getTime() + this.AdapterTimeoutMs).toISOString(),
+      signal
+    };
+  }
+
+  logDiagnostic(entry: DiagnosticLogInput): void {
     try {
+      const sessionId =
+        entry.correlation?.sessionId ?? entry.sessionId ?? this.SessionId;
       this.Logger.log({
         ...entry,
         ts: new Date().toISOString(),
-        sessionId: entry.sessionId ?? this.SessionId
+        sessionId,
+        correlation: {
+          ...entry.correlation,
+          sessionId
+        }
       });
     } catch {
       // Diagnostic logging must never change runtime behavior.
