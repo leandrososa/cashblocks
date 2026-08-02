@@ -218,7 +218,14 @@ export function createCustomerTerminalServer(
           });
           return;
         }
-        if (!sessionManager.answer(body)) {
+        const answerStatus = sessionManager.answer(body);
+        if (answerStatus === "invalid") {
+          writeJson(response, 422, {
+            error: "Answer is invalid for this prompt."
+          });
+          return;
+        }
+        if (answerStatus === "stale") {
           writeJson(response, 409, { error: "Prompt is no longer pending." });
           return;
         }

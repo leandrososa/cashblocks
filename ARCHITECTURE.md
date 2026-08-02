@@ -11,9 +11,12 @@ Cashblocks separates stable terminal behavior from project-specific flow code.
   implementations.
 - `atm-modules` provides reusable ATM transaction objects. These modules own
   transaction configuration and execution behavior.
-- `flow-sdk` binds a flow module to controlled runtime globals. Flow code can
-  orchestrate modules but cannot directly access devices, filesystem, processes,
-  or network.
+- `flow-sdk` binds a flow module to controlled runtime globals. Flow code should
+  orchestrate modules while device, filesystem, process, and network access stays
+  behind adapters. This is an architectural convention in the MVP, not a sandbox
+  for untrusted third-party code.
+- `terminal-session` owns paused interactive sessions shared by the browser
+  applications, including prompt correlation, answer validation, and expiry.
 - `host-iso8583` implements authorization plus framed TLS transport, durable
   STAN allocation, and append-only reversal recovery behind the host boundary.
 - `device-gateway` maps runtime device contracts to an external device process
@@ -28,6 +31,9 @@ Cashblocks separates stable terminal behavior from project-specific flow code.
   customer scripts.
 - `apps/terminal-shell` is the initial web shell for simulator inspection. It is
   intentionally small and shares the runtime with the customer terminal.
+- `apps/customer-terminal` is the bilingual customer-facing kiosk. It exposes
+  only customer session controls and accepts physical card activation through a
+  server-side hardware boundary.
 - `apps/native-terminal` compiles the customer terminal server into a local
   executable bundle with durable journal and loopback-safe defaults.
 

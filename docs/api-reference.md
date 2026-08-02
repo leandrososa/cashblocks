@@ -1,8 +1,15 @@
 # API Reference
 
-This reference describes the public surface of the Cashblocks workspace packages.
-Imports below use workspace package names. Until packages are published, source
-imports used by the example flow remain valid.
+This reference describes the core flow-development API. Imports below use
+workspace package names. The workspaces are private while the project is an MVP;
+source imports used by the example flow remain valid.
+
+Integration packages have focused references of their own:
+
+- [`@cashblocks/host-iso8583`](host-iso8583.md)
+- [`@cashblocks/device-gateway`](device-gateway.md)
+- [`@cashblocks/journal-replay`](journal-replay.md)
+- [`@cashblocks/certification-harness`](certification-harness.md)
 
 ## `@cashblocks/runtime-contracts`
 

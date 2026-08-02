@@ -8,19 +8,27 @@ or reusable transaction modules.
 ```ts
 import { defineFlow } from "../../../packages/flow-sdk/src/index.js";
 
-export default defineFlow(({ Cashblocks, Customer, CashWithdrawal }) => {
-  function OnStartOfDay(): void {
-    Cashblocks.SetCurrencyDetails("AUD", "$", true);
-  }
+export default defineFlow(
+  ({ Cashblocks, Idle, Customer, CoreSession, CashWithdrawal }) => {
+    function OnStartOfDay(): void {
+      Cashblocks.SetCurrencyDetails("AUD", "$", true);
+    }
 
-  async function OnIdle(): Promise<void> {
-    await Customer.PinEntry();
-    Customer.TransactionSelected = await Customer.SelectTransaction();
-    await CashWithdrawal.Execute();
-  }
+    async function OnIdle(): Promise<void> {
+      await Idle.Execute();
+      await Customer.PinEntry();
+      const transaction = await Customer.SelectTransaction();
+      if (transaction !== "CashWithdrawal") {
+        CoreSession.CancelTransaction("unsupported_transaction", transaction);
+        return;
+      }
+      Customer.TransactionSelected = transaction;
+      await CashWithdrawal.Execute();
+    }
 
-  return { OnStartOfDay, OnIdle };
-});
+    return { OnStartOfDay, OnIdle };
+  }
+);
 ```
 
 `OnStartOfDay` is for startup configuration. `OnIdle` represents the customer

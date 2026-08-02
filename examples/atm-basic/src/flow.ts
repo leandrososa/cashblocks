@@ -171,9 +171,6 @@ export default defineFlow(
             return;
           }
           CoreSession.LastTransactionAmount = CashDeposit.ExpectedAmount;
-          CashDeposit.Authorization.PinlessAuthorizationEnabled = false;
-          CashDeposit.Authorization.ChipAuthorizationRequired = false;
-          CashDeposit.Authorization.TransactionHost = "CoreHost";
           await CashDeposit.Execute();
         } else if (transaction === "FastCash") {
           CoreSession.CurrentAccount = await Customer.SelectAccount(["Checking", "Savings"]);

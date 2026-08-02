@@ -92,6 +92,52 @@ test("customer terminal caps sessions and releases expired sessions", async () =
   }
 });
 
+test("customer terminal rejects answers that do not match the active prompt", async () => {
+  const fixture = await createFixture();
+  const server = createCustomerTerminalServer({
+    publicDir: fixture.publicDir,
+    allowedHosts: ["terminal.local"],
+    allowedOrigins: ["http://terminal.local"]
+  });
+  await listen(server);
+  const port = addressPort(server);
+  const headers = {
+    host: "terminal.local",
+    origin: "http://terminal.local",
+    contentType: "application/json"
+  };
+
+  try {
+    const state = JSON.parse((await send(port, headers)).body) as SessionState;
+    const invalid = await send(
+      port,
+      headers,
+      "/api/session/answer",
+      JSON.stringify({
+        sessionId: state.sessionId,
+        promptId: state.prompt?.id,
+        value: "__invalid__"
+      })
+    );
+    assert.equal(invalid.status, 422);
+
+    const retry = await send(
+      port,
+      headers,
+      "/api/session/answer",
+      JSON.stringify({
+        sessionId: state.sessionId,
+        promptId: state.prompt?.id,
+        value: answerFor(state)
+      })
+    );
+    assert.equal(retry.status, 200);
+  } finally {
+    await close(server);
+    await rm(fixture.root, { recursive: true, force: true });
+  }
+});
+
 test("customer terminal creates collision-resistant concurrent session ids", async () => {
   const fixture = await createFixture();
   const server = createCustomerTerminalServer({

@@ -4,19 +4,20 @@ This guide gets a new developer from clone to a running ATM simulator.
 
 ## Requirements
 
-- Bun 1.3.x
-- Node.js compatible with the TypeScript output used by the repo
+- Bun 1.3.10 or newer
+- Node.js 22 or newer
 
 ## Install and Verify
 
 ```sh
-bun install
-bun run build
-bun run test
+git clone https://github.com/leandrososa/cashblocks.git
+cd cashblocks
+bun install --frozen-lockfile
+bun run check
 ```
 
-The test suite covers the runtime core, ATM modules, flow SDK, terminal shell
-simulation, and the example flow package.
+`bun run check` performs a strict typecheck, removes stale build output, compiles
+the workspace, and discovers every compiled `*.test.js` file automatically.
 
 ## Run the Browser Shell
 
