@@ -468,7 +468,6 @@ export class FastCashModule extends CashWithdrawalModule {
 }
 
 export class CashDepositModule extends AtmModule {
-  readonly Authorization = new AuthorizationModule();
   ExpectedAmount = 0;
   Account = "Checking";
 

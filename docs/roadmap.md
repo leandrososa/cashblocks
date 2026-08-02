@@ -1,4 +1,4 @@
-# Roadmap
+# Project Status
 
 Cashblocks is currently a simulator-first MVP focused on developer experience,
 flow architecture, and adapter boundaries.

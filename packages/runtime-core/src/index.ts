@@ -829,17 +829,30 @@ export class SimulatorCustomerInteraction implements CustomerInteraction {
 export class PendingCustomerPrompt {
   readonly id: string;
   private resolveAnswer?: (answer: CustomerPromptAnswer) => void;
+  private rejectAnswer?: (reason: Error) => void;
   readonly answer: Promise<CustomerPromptAnswer>;
 
   constructor(readonly prompt: CustomerPrompt) {
     this.id = `prompt-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-    this.answer = new Promise((resolve) => {
+    this.answer = new Promise((resolve, reject) => {
       this.resolveAnswer = resolve;
+      this.rejectAnswer = reject;
     });
   }
 
   resolve(value: string): void {
     this.resolveAnswer?.({ value });
+    this.clear();
+  }
+
+  reject(reason: Error): void {
+    this.rejectAnswer?.(reason);
+    this.clear();
+  }
+
+  private clear(): void {
+    this.resolveAnswer = undefined;
+    this.rejectAnswer = undefined;
   }
 }
 
@@ -865,6 +878,15 @@ export class QueuedCustomerInteraction implements CustomerInteraction {
       return false;
     }
     this.pendingPrompt.resolve(value);
+    this.pendingPrompt = undefined;
+    return true;
+  }
+
+  cancelPending(reason: Error): boolean {
+    if (!this.pendingPrompt) {
+      return false;
+    }
+    this.pendingPrompt.reject(reason);
     this.pendingPrompt = undefined;
     return true;
   }

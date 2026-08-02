@@ -1,6 +1,13 @@
 dist/
 release/
 node_modules/
+coverage/
 *.log
 data/*.jsonl
+.env
+.env.*
+!.env.example
 .DS_Store
+.gstack/
+.idea/
+.vscode/

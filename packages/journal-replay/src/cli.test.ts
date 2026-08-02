@@ -2,8 +2,9 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
 test("journal replay CLI filters sessions and reports validation exit status", async () => {
   const root = await mkdtemp(join(tmpdir(), "cashblocks-replay-cli-"));
@@ -65,7 +66,7 @@ test("journal replay CLI filters sessions and reports validation exit status", a
 function runCli(...arguments_: string[]) {
   return spawnSync(
     process.execPath,
-    [resolve("packages/journal-replay/src/cli.ts"), ...arguments_],
+    [fileURLToPath(new URL("./cli.js", import.meta.url)), ...arguments_],
     {
       cwd: process.cwd(),
       encoding: "utf8"

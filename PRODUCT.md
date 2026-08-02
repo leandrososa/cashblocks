@@ -1,9 +1,5 @@
 # Cashblocks Customer Terminal
 
-## Register
-
-product
-
 ## Users
 
 Bank customers use the terminal while standing in a public, time-sensitive

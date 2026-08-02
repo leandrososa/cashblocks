@@ -61,6 +61,8 @@ export type TerminalSessionState<Summary> = {
   events?: RuntimeEvent[];
 };
 
+export type TerminalSessionAnswerStatus = "accepted" | "stale" | "invalid";
+
 export class TerminalSessionManager<Summary> {
   private readonly sessions = new Map<string, InteractiveSession>();
   private readonly lastAccess = new Map<string, number>();
@@ -122,14 +124,26 @@ export class TerminalSessionManager<Summary> {
     return session;
   }
 
-  answer(input: { sessionId: string; promptId: string; value: string }): boolean {
+  answer(input: {
+    sessionId: string;
+    promptId: string;
+    value: string;
+  }): TerminalSessionAnswerStatus {
     this.pruneExpired();
     const session = this.sessions.get(input.sessionId);
     if (!session) {
-      return false;
+      return "stale";
     }
     this.lastAccess.set(input.sessionId, this.now());
-    return session.interaction.answer(input.promptId, input.value);
+    const pending = session.interaction.current();
+    if (!pending || pending.id !== input.promptId) {
+      return "stale";
+    }
+    if (!isValidPromptAnswer(pending.prompt, input.value)) {
+      return "invalid";
+    }
+    session.interaction.answer(input.promptId, input.value);
+    return "accepted";
   }
 
   get(sessionId: string): InteractiveSession | undefined {
@@ -170,8 +184,9 @@ export class TerminalSessionManager<Summary> {
     let removed = 0;
     for (const [sessionId, accessedAt] of this.lastAccess) {
       if (accessedAt <= cutoff) {
-        this.sessions.delete(sessionId);
-        this.lastAccess.delete(sessionId);
+        const session = this.sessions.get(sessionId);
+        session?.interaction.cancelPending(new TerminalSessionExpiredError(sessionId));
+        this.remove(sessionId);
         removed += 1;
       }
     }
@@ -202,6 +217,13 @@ export class TerminalSessionCapacityError extends Error {
   constructor(readonly capacity: number) {
     super(`Terminal session capacity of ${capacity} has been reached.`);
     this.name = "TerminalSessionCapacityError";
+  }
+}
+
+export class TerminalSessionExpiredError extends Error {
+  constructor(readonly sessionId: string) {
+    super(`Interactive session ${sessionId} has expired.`);
+    this.name = "TerminalSessionExpiredError";
   }
 }
 
@@ -254,4 +276,28 @@ function serializePrompt(prompt?: PendingCustomerPrompt): SerializedCustomerProm
     id: prompt.id,
     ...prompt.prompt
   };
+}
+
+function isValidPromptAnswer(prompt: CustomerPrompt, value: string): boolean {
+  if (typeof value !== "string") {
+    return false;
+  }
+  switch (prompt.kind) {
+    case "pin":
+      return /^\d{4}$/.test(value);
+    case "transaction":
+    case "account":
+    case "option":
+      return prompt.options.includes(value);
+    case "amount": {
+      if (!/^[1-9]\d*$/.test(value)) {
+        return false;
+      }
+      const amount = Number(value);
+      return (
+        Number.isSafeInteger(amount) &&
+        (prompt.allowCustom || prompt.presets.includes(amount))
+      );
+    }
+  }
 }

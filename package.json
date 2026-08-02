@@ -1,19 +1,41 @@
 {
   "name": "cashblocks",
   "version": "0.1.0",
+  "description": "Simulator-first TypeScript runtime for testable ATM flows, pluggable adapters, and replayable journals.",
   "private": true,
   "license": "Apache-2.0",
   "type": "module",
   "packageManager": "bun@1.3.10",
+  "engines": {
+    "bun": ">=1.3.10",
+    "node": ">=22"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/leandrososa/cashblocks.git"
+  },
+  "homepage": "https://github.com/leandrososa/cashblocks#readme",
+  "bugs": {
+    "url": "https://github.com/leandrososa/cashblocks/issues"
+  },
+  "keywords": [
+    "atm",
+    "financial-terminals",
+    "iso8583",
+    "simulation",
+    "typescript"
+  ],
   "workspaces": [
     "packages/*",
     "apps/*",
     "examples/*"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "clean": "node scripts/clean.mjs",
+    "build": "bun run clean && tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "bun test packages/runtime-core/src/index.test.ts packages/atm-modules/src/index.test.ts packages/flow-sdk/src/index.test.ts packages/host-iso8583/src/index.test.ts packages/host-iso8583/src/framed-transport.test.ts packages/host-iso8583/src/stan-store.test.ts packages/host-iso8583/src/reversal-store.test.ts packages/device-gateway/src/index.test.ts packages/device-gateway/src/websocket.test.ts packages/journal-replay/src/index.test.ts packages/journal-replay/src/cli.test.ts packages/certification-harness/src/index.test.ts packages/certification-harness/src/cli.test.ts apps/customer-terminal/src/server.test.ts apps/native-terminal/src/config.test.ts apps/native-terminal/src/shutdown.test.ts apps/terminal-shell/src/simulation.test.ts examples/atm-basic/src/flow.test.ts",
+    "test": "bun run build && node scripts/run-tests.mjs",
+    "check": "bun run typecheck && bun run test",
     "replay": "bun packages/journal-replay/src/cli.ts",
     "certify": "bun packages/certification-harness/src/cli.ts",
     "package:native": "bun run build && bun apps/native-terminal/src/package.ts",
