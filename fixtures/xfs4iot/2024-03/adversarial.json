@@ -1,0 +1,45 @@
+{
+  "publication": "2024-03",
+  "cases": [
+    {
+      "id": "malformed-message",
+      "layer": "schema",
+      "expectedIssue": "ENVELOPE_INVALID",
+      "message": { "header": { "type": "completion", "name": "Common.Status", "version": "3.0" } }
+    },
+    {
+      "id": "mismatched-request",
+      "layer": "correlation",
+      "expectedIssue": "MISMATCHED_REQUEST_ID",
+      "sent": { "header": { "type": "command", "name": "Common.Status", "version": "3.0", "requestId": 300 } },
+      "received": { "header": { "type": "completion", "name": "Common.Status", "version": "3.0", "requestId": 301 }, "payload": { "common": { "device": "online" } } }
+    },
+    {
+      "id": "unsupported-command",
+      "layer": "subset",
+      "expectedIssue": "UNSUPPORTED_MESSAGE",
+      "message": { "header": { "type": "command", "name": "Printer.PrintForm", "version": "2.0", "requestId": 302, "timeout": 5000 } }
+    },
+    {
+      "id": "command-timeout",
+      "layer": "transport",
+      "failurePoint": "deadline-before-completion",
+      "stateChanging": false,
+      "expectedClassification": "safe-to-retry"
+    },
+    {
+      "id": "pre-send-disconnect",
+      "layer": "transport",
+      "failurePoint": "before-send",
+      "stateChanging": true,
+      "expectedClassification": "safe-to-retry"
+    },
+    {
+      "id": "post-send-disconnect",
+      "layer": "transport",
+      "failurePoint": "after-send-before-completion",
+      "stateChanging": true,
+      "expectedClassification": "indeterminate"
+    }
+  ]
+}

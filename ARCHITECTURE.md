@@ -22,6 +22,11 @@ Cashblocks separates stable terminal behavior from project-specific flow code.
 - `device-gateway` maps runtime device contracts to an external device process
   over an isolated, secure WebSocket transport while keeping vendor APIs out of
   flow packages.
+- The XFS4IoT 0.2 integration follows
+  [`ADR 0001`](docs/adr/0001-xfs4iot-adapter-mapping.md): a protocol client owns
+  discovery and correlation, dedicated adapters own device state machines, and
+  flow packages remain protocol-independent. The exact protocol target is in
+  [`docs/xfs4iot-compatibility.md`](docs/xfs4iot-compatibility.md).
 - `journal-replay` validates durable events and projects session state without
   re-executing external side effects.
 - `certification-harness` executes bounded conformance scenarios, validates

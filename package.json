@@ -38,6 +38,7 @@
     "check": "bun run typecheck && bun run test",
     "replay": "bun packages/journal-replay/src/cli.ts",
     "certify": "bun packages/certification-harness/src/cli.ts",
+    "xfs4iot:validate-fixtures": "bun scripts/validate-xfs4iot-fixtures.ts",
     "package:native": "bun run build && bun apps/native-terminal/src/package.ts",
     "dev": "bun run build && node dist/apps/terminal-shell/src/dev-server.js",
     "customer": "bun run build && node dist/apps/customer-terminal/src/dev-server.js",
@@ -46,6 +47,7 @@
   },
   "devDependencies": {
     "@types/node": "^25.8.0",
+    "ajv": "8.18.0",
     "typescript": "^5.8.3"
   }
 }

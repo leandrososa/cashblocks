@@ -1,0 +1,24 @@
+{
+  "maxMessageBytes": 262144,
+  "maxPendingRequests": 32,
+  "maxEventBacklog": 256,
+  "maxReconnectAttempts": 5,
+  "reconnectBaseDelayMs": 250,
+  "reconnectMaxDelayMs": 4000,
+  "reconnectWindowMs": 30000,
+  "defaultCommandDeadlineMs": 10000,
+  "commandDeadlinesMs": {
+    "ServicePublisher.GetServices": 5000,
+    "Common.Status": 5000,
+    "Common.Capabilities": 5000,
+    "Common.SetVersions": 5000,
+    "Common.SetTransactionState": 5000,
+    "Common.Cancel": 5000,
+    "CardReader.ReadRawData": 30000,
+    "CardReader.Move": 15000,
+    "CashDispenser.Dispense": 30000,
+    "CashDispenser.Present": 15000,
+    "CashDispenser.GetPresentStatus": 5000,
+    "CashManagement.Retract": 20000
+  }
+}

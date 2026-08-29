@@ -1,0 +1,304 @@
+{
+  "publication": "2024-03",
+  "fixtures": [
+    {
+      "id": "service-publisher.get-services.command",
+      "role": "command",
+      "message": {
+        "header": { "type": "command", "name": "ServicePublisher.GetServices", "version": "2.0", "requestId": 1, "timeout": 5000 }
+      }
+    },
+    {
+      "id": "service-publisher.get-services.completion",
+      "role": "completion",
+      "message": {
+        "header": { "type": "completion", "name": "ServicePublisher.GetServices", "version": "2.0", "requestId": 1 },
+        "payload": { "vendorName": "Cashblocks Emulator", "services": [{ "serviceURI": "ws://127.0.0.1:5846/xfs4iot/card-reader" }] }
+      }
+    },
+    {
+      "id": "service-publisher.service-detail.event",
+      "role": "event",
+      "message": {
+        "header": { "type": "event", "name": "ServicePublisher.ServiceDetailEvent", "version": "2.0", "requestId": 1 },
+        "payload": { "vendorName": "Cashblocks Emulator", "services": [{ "serviceURI": "ws://127.0.0.1:5846/xfs4iot/cash-dispenser" }] }
+      }
+    },
+    {
+      "id": "common.status.command",
+      "role": "command",
+      "message": { "header": { "type": "command", "name": "Common.Status", "version": "3.0", "requestId": 10, "timeout": 5000 } }
+    },
+    {
+      "id": "common.status.completion",
+      "role": "completion",
+      "message": {
+        "header": { "type": "completion", "name": "Common.Status", "version": "3.0", "requestId": 10 },
+        "payload": { "common": { "device": "online" } }
+      }
+    },
+    {
+      "id": "common.capabilities.command",
+      "role": "command",
+      "message": { "header": { "type": "command", "name": "Common.Capabilities", "version": "3.0", "requestId": 11, "timeout": 5000 } }
+    },
+    {
+      "id": "common.capabilities.completion",
+      "role": "completion",
+      "message": {
+        "header": { "type": "completion", "name": "Common.Capabilities", "version": "3.0", "requestId": 11 },
+        "payload": {
+          "interfaces": [{ "name": "Common", "commands": { "Common.Status": { "versions": ["3.0"] } }, "events": { "Common.StatusChangedEvent": { "versions": ["3.0"] } }, "maximumRequests": 32 }],
+          "common": { "serviceVersion": "0.2.0", "deviceInformation": [] }
+        }
+      }
+    },
+    {
+      "id": "common.set-versions.command",
+      "role": "command",
+      "message": {
+        "header": { "type": "command", "name": "Common.SetVersions", "version": "2.0", "requestId": 12, "timeout": 5000 },
+        "payload": { "commands": { "Common.Status": 3 }, "events": { "Common.StatusChangedEvent": 3 } }
+      }
+    },
+    {
+      "id": "common.set-versions.completion",
+      "role": "completion",
+      "message": { "header": { "type": "completion", "name": "Common.SetVersions", "version": "2.0", "requestId": 12 } }
+    },
+    {
+      "id": "common.set-transaction-state.command",
+      "role": "command",
+      "message": {
+        "header": { "type": "command", "name": "Common.SetTransactionState", "version": "2.0", "requestId": 13, "timeout": 5000 },
+        "payload": { "state": "active", "transactionID": "session-demo-001" }
+      }
+    },
+    {
+      "id": "common.set-transaction-state.completion",
+      "role": "completion",
+      "message": { "header": { "type": "completion", "name": "Common.SetTransactionState", "version": "2.0", "requestId": 13 } }
+    },
+    {
+      "id": "common.cancel.command",
+      "role": "command",
+      "message": {
+        "header": { "type": "command", "name": "Common.Cancel", "version": "2.0", "requestId": 14, "timeout": 5000 },
+        "payload": { "requestIds": [100] }
+      }
+    },
+    {
+      "id": "common.cancel.completion",
+      "role": "completion",
+      "message": { "header": { "type": "completion", "name": "Common.Cancel", "version": "2.0", "requestId": 14 } }
+    },
+    {
+      "id": "common.acknowledge",
+      "role": "acknowledge",
+      "message": { "header": { "type": "acknowledge", "name": "CardReader.ReadRawData", "version": "2.0", "requestId": 100 } }
+    },
+    {
+      "id": "common.status-changed.unsolicited",
+      "role": "event",
+      "message": {
+        "header": { "type": "unsolicited", "name": "Common.StatusChangedEvent", "version": "3.0" },
+        "payload": { "common": { "device": "offline" } }
+      }
+    },
+    {
+      "id": "common.error.event",
+      "role": "error",
+      "message": {
+        "header": { "type": "event", "name": "Common.ErrorEvent", "version": "2.0", "requestId": 100 },
+        "payload": { "eventId": "hardware", "action": "maintenance", "vendorDescription": "Synthetic reader fault" }
+      }
+    },
+    {
+      "id": "common.error.unsolicited",
+      "role": "error",
+      "message": {
+        "header": { "type": "unsolicited", "name": "Common.ErrorEvent", "version": "2.0" },
+        "payload": { "eventId": "software", "action": "reset", "vendorDescription": "Synthetic service fault" }
+      }
+    },
+    {
+      "id": "card-reader.read-raw-data.command",
+      "role": "command",
+      "message": {
+        "header": { "type": "command", "name": "CardReader.ReadRawData", "version": "2.0", "requestId": 100, "timeout": 30000 },
+        "payload": { "chip": true }
+      }
+    },
+    {
+      "id": "card-reader.insert-card.event",
+      "role": "event",
+      "message": { "header": { "type": "event", "name": "CardReader.InsertCardEvent", "version": "2.0", "requestId": 100 } }
+    },
+    {
+      "id": "card-reader.media-inserted.event",
+      "role": "event",
+      "message": { "header": { "type": "event", "name": "CardReader.MediaInsertedEvent", "version": "2.0", "requestId": 100 } }
+    },
+    {
+      "id": "card-reader.track-detected.event",
+      "role": "event",
+      "message": {
+        "header": { "type": "event", "name": "CardReader.TrackDetectedEvent", "version": "2.0", "requestId": 100 },
+        "payload": { "track2": true }
+      }
+    },
+    {
+      "id": "card-reader.read-raw-data.completion",
+      "role": "completion",
+      "message": {
+        "header": { "type": "completion", "name": "CardReader.ReadRawData", "version": "3.0", "requestId": 100 },
+        "payload": { "chip": [{ "data": "AQID" }] }
+      }
+    },
+    {
+      "id": "card-reader.invalid-media.event",
+      "role": "error",
+      "message": { "header": { "type": "event", "name": "CardReader.InvalidMediaEvent", "version": "2.0", "requestId": 101 } }
+    },
+    {
+      "id": "card-reader.read-raw-data.error",
+      "role": "error",
+      "message": {
+        "header": { "type": "completion", "name": "CardReader.ReadRawData", "version": "3.0", "requestId": 101, "completionCode": "commandErrorCode" },
+        "payload": { "errorCode": "mediaJam" }
+      }
+    },
+    {
+      "id": "card-reader.move.command",
+      "role": "command",
+      "message": {
+        "header": { "type": "command", "name": "CardReader.Move", "version": "2.0", "requestId": 102, "timeout": 15000 },
+        "payload": { "from": "transport", "to": "exit" }
+      }
+    },
+    {
+      "id": "card-reader.move.completion",
+      "role": "completion",
+      "message": { "header": { "type": "completion", "name": "CardReader.Move", "version": "2.0", "requestId": 102 } }
+    },
+    {
+      "id": "card-reader.media-removed.event",
+      "role": "event",
+      "message": { "header": { "type": "event", "name": "CardReader.MediaRemovedEvent", "version": "2.0", "requestId": 102 } }
+    },
+    {
+      "id": "cash-dispenser.dispense.command",
+      "role": "command",
+      "message": {
+        "header": { "type": "command", "name": "CashDispenser.Dispense", "version": "3.0", "requestId": 200, "timeout": 30000 },
+        "payload": { "denomination": { "denomination": { "app": { "currencies": { "USD": 40 }, "counts": { "unitA": 2 } } } }, "position": "outFront" }
+      }
+    },
+    {
+      "id": "cash-dispenser.start-dispense.event",
+      "role": "event",
+      "message": { "header": { "type": "event", "name": "CashDispenser.StartDispenseEvent", "version": "2.0", "requestId": 200 } }
+    },
+    {
+      "id": "cash-dispenser.delayed-dispense.event",
+      "role": "event",
+      "message": {
+        "header": { "type": "event", "name": "CashDispenser.DelayedDispenseEvent", "version": "2.0", "requestId": 200 },
+        "payload": { "delay": 250 }
+      }
+    },
+    {
+      "id": "cash-dispenser.dispense.completion",
+      "role": "completion",
+      "message": {
+        "header": { "type": "completion", "name": "CashDispenser.Dispense", "version": "3.0", "requestId": 200 },
+        "payload": { "denomination": { "currencies": { "USD": 40 }, "values": { "unitA": 2 } }, "bunches": "1" }
+      }
+    },
+    {
+      "id": "cash-dispenser.dispense.error",
+      "role": "error",
+      "message": {
+        "header": { "type": "completion", "name": "CashDispenser.Dispense", "version": "3.0", "requestId": 201, "completionCode": "commandErrorCode" },
+        "payload": { "errorCode": "cashUnitError" }
+      }
+    },
+    {
+      "id": "cash-dispenser.incomplete-dispense.event",
+      "role": "error",
+      "message": {
+        "header": { "type": "event", "name": "CashDispenser.IncompleteDispenseEvent", "version": "3.0", "requestId": 201 },
+        "payload": { "currencies": { "USD": 20 }, "values": { "unitA": 1 } }
+      }
+    },
+    {
+      "id": "cash-dispenser.present.command",
+      "role": "command",
+      "message": {
+        "header": { "type": "command", "name": "CashDispenser.Present", "version": "2.0", "requestId": 202, "timeout": 15000 },
+        "payload": { "position": "outFront" }
+      }
+    },
+    {
+      "id": "cash-dispenser.present.completion",
+      "role": "completion",
+      "message": {
+        "header": { "type": "completion", "name": "CashDispenser.Present", "version": "2.0", "requestId": 202 },
+        "payload": { "position": { "position": "outFront" } }
+      }
+    },
+    {
+      "id": "cash-management.items-presented.unsolicited",
+      "role": "event",
+      "message": {
+        "header": { "type": "unsolicited", "name": "CashManagement.ItemsPresentedEvent", "version": "2.0" },
+        "payload": { "position": "outFront", "additionalBunches": "0" }
+      }
+    },
+    {
+      "id": "cash-management.items-taken.unsolicited",
+      "role": "event",
+      "message": {
+        "header": { "type": "unsolicited", "name": "CashManagement.ItemsTakenEvent", "version": "2.0" },
+        "payload": { "position": "outFront", "additionalBunches": "0" }
+      }
+    },
+    {
+      "id": "cash-dispenser.get-present-status.command",
+      "role": "command",
+      "message": {
+        "header": { "type": "command", "name": "CashDispenser.GetPresentStatus", "version": "2.0", "requestId": 203, "timeout": 5000 },
+        "payload": { "position": "outFront" }
+      }
+    },
+    {
+      "id": "cash-dispenser.get-present-status.completion",
+      "role": "completion",
+      "message": {
+        "header": { "type": "completion", "name": "CashDispenser.GetPresentStatus", "version": "3.0", "requestId": 203 },
+        "payload": { "presentState": "presented", "denomination": { "currencies": { "USD": 40 }, "values": { "unitA": 2 } } }
+      }
+    },
+    {
+      "id": "cash-management.retract.command",
+      "role": "command",
+      "message": {
+        "header": { "type": "command", "name": "CashManagement.Retract", "version": "2.0", "requestId": 204, "timeout": 20000 },
+        "payload": { "location": { "outputPosition": "outFront", "retractArea": "retract", "index": 1 } }
+      }
+    },
+    {
+      "id": "cash-management.retract.completion",
+      "role": "completion",
+      "message": { "header": { "type": "completion", "name": "CashManagement.Retract", "version": "2.0", "requestId": 204 } }
+    },
+    {
+      "id": "cash-management.incomplete-retract.event",
+      "role": "error",
+      "message": {
+        "header": { "type": "event", "name": "CashManagement.IncompleteRetractEvent", "version": "2.0", "requestId": 204 },
+        "payload": { "reason": "retractFailure" }
+      }
+    }
+  ]
+}

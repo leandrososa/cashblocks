@@ -32,15 +32,15 @@ certification against real hardware.
 
 ## Scope Decisions
 
-- [ ] Pin the target XFS4IoT specification release. Start with release
+- [x] Pin the target XFS4IoT specification release. Start with release
       `2024-03` unless an incompatibility is documented.
-- [ ] Record the exact command and event subset required by the current
+- [x] Record the exact command and event subset required by the current
       withdrawal flow.
-- [ ] Decide whether the first external service is KAL SP-Dev, another public
+- [x] Decide whether the first external service is KAL SP-Dev, another public
       implementation, or a repository-owned protocol emulator.
-- [ ] Document license and redistribution constraints for schemas, generated
+- [x] Document license and redistribution constraints for schemas, generated
       types, fixtures, and third-party binaries before committing them.
-- [ ] Write an architecture decision record for the mapping between XFS4IoT
+- [x] Write an architecture decision record for the mapping between XFS4IoT
       services and Cashblocks adapter contracts.
 
 ### Required protocol subset
@@ -66,20 +66,20 @@ certification against real hardware.
 
 ## 1. Protocol Research and Fixtures
 
-- [ ] Add `docs/xfs4iot-compatibility.md` with the pinned release, supported
+- [x] Add `docs/xfs4iot-compatibility.md` with the pinned release, supported
       services, commands, events, fields, and known gaps.
-- [ ] Capture minimal valid request, completion, event, and error fixtures for
+- [x] Capture minimal valid request, completion, event, and error fixtures for
       each required command.
-- [ ] Add malformed, mismatched-request, unsupported-command, timeout, and
+- [x] Add malformed, mismatched-request, unsupported-command, timeout, and
       disconnect fixtures.
-- [ ] Define protocol limits for message size, pending requests, event backlog,
+- [x] Define protocol limits for message size, pending requests, event backlog,
       reconnect attempts, and deadlines.
-- [ ] Ensure fixtures contain no real PAN, PIN, keys, account data, or vendor
+- [x] Ensure fixtures contain no real PAN, PIN, keys, account data, or vendor
       credentials.
 
 ## 2. XFS4IoT Client Package
 
-- [ ] Create `packages/xfs4iot-client` with no dependency on ATM flows or UI.
+- [x] Create `packages/xfs4iot-client` with no dependency on ATM flows or UI.
 - [ ] Implement secure WebSocket connection setup and explicit loopback-only
       opt-in for plaintext development connections.
 - [ ] Implement command/completion correlation and asynchronous event routing.
@@ -219,4 +219,3 @@ certification against real hardware.
   <https://xfs4iot.github.io/Specifications-Preview.github.io/>
 - KAL XFS4IoT SP-Dev:
   <https://github.com/KAL-ATM-Software/KAL_XFS4IoT_SP-Dev>
-
