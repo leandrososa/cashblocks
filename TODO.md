@@ -80,16 +80,16 @@ certification against real hardware.
 ## 2. XFS4IoT Client Package
 
 - [x] Create `packages/xfs4iot-client` with no dependency on ATM flows or UI.
-- [ ] Implement secure WebSocket connection setup and explicit loopback-only
+- [x] Implement secure WebSocket connection setup and explicit loopback-only
       opt-in for plaintext development connections.
-- [ ] Implement command/completion correlation and asynchronous event routing.
-- [ ] Validate inbound envelopes and the supported payload subset at runtime.
-- [ ] Support cancellation, command deadlines, reconnect policy, and bounded
+- [x] Implement command/completion correlation and asynchronous event routing.
+- [x] Validate inbound envelopes and the supported payload subset at runtime.
+- [x] Support cancellation, command deadlines, reconnect policy, and bounded
       resource use.
-- [ ] Classify failures as safe-to-retry, declined/known, or indeterminate after
+- [x] Classify failures as safe-to-retry, declined/known, or indeterminate after
       a state-changing send.
-- [ ] Redact sensitive or unknown protocol fields from diagnostic logs.
-- [ ] Add unit tests for framing, correlation, duplicate or late completions,
+- [x] Redact sensitive or unknown protocol fields from diagnostic logs.
+- [x] Add unit tests for framing, correlation, duplicate or late completions,
       unexpected events, disconnects, aborts, and malformed messages.
 
 ## 3. Cashblocks Device Adapters

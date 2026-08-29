@@ -9,6 +9,7 @@ import {
   inspectFixtureCorpus,
   inspectFixtureMessage
 } from "./protocol-fixtures.js";
+import { parseXfs4IotMessage } from "./protocol.js";
 
 const fixtureRoot = resolve("fixtures/xfs4iot/2024-03");
 
@@ -20,6 +21,12 @@ test("valid XFS4IoT fixtures cover every supported command and completion", asyn
   };
 
   assert.deepEqual(inspectFixtureCorpus(corpus), []);
+  for (const fixture of corpus.fixtures) {
+    assert.doesNotThrow(
+      () => parseXfs4IotMessage(fixture.message),
+      `Runtime parser rejected ${fixture.message.header.type}:${fixture.message.header.name}`
+    );
+  }
   const covered = new Set(
     corpus.fixtures.map(
       ({ message }) => `${message.header.type}:${message.header.name}`

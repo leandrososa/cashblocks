@@ -176,13 +176,13 @@ completed so protocol tests are not presented as hardware verification.
 
 | Area | Implemented | Tested | Hardware verified | Notes |
 | --- | --- | --- | --- | --- |
-| Common discovery/lifecycle | No | No | No | Emulator target only. |
-| Common status/capabilities | No | No | No | Startup gate for both device services. |
+| Common discovery/lifecycle | Yes | Yes | No | Client transport and ServicePublisher message subset; emulator integration remains pending. |
+| Common status/capabilities | Yes | Yes | No | Client validation is complete; adapter startup gate remains pending. |
 | CardReader withdrawal subset | No | No | No | Synthetic card data only. |
 | CashDispenser withdrawal subset | No | No | No | Deterministic emulator inventory. |
-| Command/completion correlation | No | No | No | Must cover duplicate and late completions. |
-| Async event routing | No | No | No | Must be bounded and session-correlated. |
-| Post-send disconnect recovery | No | No | No | Must never report normal success or failure. |
+| Command/completion correlation | Yes | Yes | No | Duplicate, late, mismatched, and out-of-order completions are covered. |
+| Async event routing | Yes | Yes | No | Bounded backlog with pending, orphan, and unsolicited classification. |
+| Post-send disconnect recovery | Yes | Yes | No | Client reports indeterminate state; adapter reconciliation mapping remains pending. |
 | Independent service provider | No | No | No | Post-0.2 validation candidate. |
 
 ## Known gaps and prerequisites
